@@ -104,9 +104,30 @@ async function request(path, { method = 'GET', body, timeout = DEFAULT_TIMEOUT, 
   }
 }
 
-/** GET /api/status — 打印机状态 */
-export function fetchStatus() {
-  return request('/api/status', { timeout: 4500 })
+/** GET /api/status — 打印机状态；传入 addr 查询指定打印机 */
+export function fetchStatus(addr) {
+  const query = addr ? `?addr=${encodeURIComponent(addr)}` : ''
+  return request(`/api/status${query}`, { timeout: 6000 })
+}
+
+/** GET /api/devices — 已知蓝牙设备（快，不主动扫描） */
+export function fetchDevices() {
+  return request('/api/devices', { timeout: 12000 })
+}
+
+/** GET /api/scan?seconds=8 — 主动扫描蓝牙设备（阻塞约 seconds 秒） */
+export function scanDevices(seconds = 8) {
+  const value = Math.max(3, Math.min(20, Math.round(Number(seconds) || 8)))
+  return request(`/api/scan?seconds=${value}`, { timeout: 30000 })
+}
+
+/** POST /api/connect — 连接指定地址并握手；返回 {ok, addr, model, status, value, errors} */
+export function connectDevice(addr) {
+  return request('/api/connect', {
+    method: 'POST',
+    body: { addr: String(addr || '') },
+    timeout: 30000,
+  })
 }
 
 /**
@@ -151,14 +172,21 @@ export function printLabel(spec) {
   return request('/api/print', { method: 'POST', body: spec, timeout: 25000 })
 }
 
-/** POST /api/learn — 测纸 / 定位 */
-export function learnPaper() {
-  return request('/api/learn', { method: 'POST', body: {}, timeout: 20000 })
+/** POST /api/learn — 测纸 / 定位；addr 指定目标打印机 */
+export function learnPaper(addr) {
+  return request('/api/learn', {
+    method: 'POST',
+    body: addr ? { addr } : {},
+    timeout: 20000,
+  })
 }
 
 export const api = {
   base: API_BASE,
   fetchStatus,
+  fetchDevices,
+  scanDevices,
+  connectDevice,
   fetchPreview,
   printLabel,
   learnPaper,

@@ -3,10 +3,31 @@ import { computed } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { API_BASE } from '../api'
 import { TOP_MARGIN_MM } from '../label'
-import { learnPaper, refreshStatus, state } from '../stores/store'
+import {
+  currentPrinterLabel,
+  learnPaper,
+  openPrinterDialog,
+  printerConnection,
+  printerModelLabel,
+  refreshStatus,
+  state,
+} from '../stores/store'
 
 const phase = computed(() => state.backend.phase)
 const info = computed(() => state.backend.info)
+const connection = printerConnection
+const printerTooltip = computed(() => {
+  if (!state.printer.addr) return '未选择打印机：点击扫描并连接打印机'
+  const lines = [
+    `当前打印机：${currentPrinterLabel.value}`,
+    `状态：${connection.value.label}`,
+  ]
+  if (printerModelLabel.value) lines.push(`型号：${printerModelLabel.value}`)
+  if (state.printer.statusLabel) lines.push(`打印机回复：${state.printer.statusLabel}`)
+  if (state.printer.error) lines.push(`错误：${state.printer.error}`)
+  lines.push('点击切换 / 重新连接打印机')
+  return lines.join('\n')
+})
 
 const dotClass = computed(() => {
   if (phase.value === 'checking') return 'is-checking'
@@ -58,6 +79,22 @@ const dotHeight = computed(() => Math.round(state.doc.height_mm * 8))
 <template>
   <footer class="statusbar">
     <div class="status-group">
+      <button
+        class="printer-chip"
+        :class="`printer-chip--${connection.key}`"
+        :title="printerTooltip"
+        @click="openPrinterDialog()"
+      >
+        <AppIcon name="printer" :size="14" />
+        <span class="printer-chip-text">
+          <template v-if="state.printer.addr">
+            当前打印机：{{ state.printer.name || state.printer.addr }}
+            <template v-if="state.printer.name && state.printer.name !== state.printer.addr">（{{ state.printer.addr }}）</template>
+          </template>
+          <template v-else>选择打印机</template>
+        </span>
+        <span class="printer-state" :class="`is-${connection.key}`">{{ connection.label }}</span>
+      </button>
       <span class="status-dot" :class="dotClass" aria-hidden="true"></span>
       <span class="status-main" :title="statusDetail">{{ statusText }}</span>
       <span v-if="phase === 'offline'" class="status-error">{{ state.backend.error }}</span>

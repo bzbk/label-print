@@ -28,6 +28,51 @@ import { clamp, round1 } from '../units'
 const MAX_TOASTS = 4
 let toastSeq = 0
 
+/* ------------------------------------------------------- 打印机记忆（localStorage） */
+
+const PRINTER_STORAGE_KEY = 'gofor-label-printer-v1'
+
+function readStoredPrinter() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return null
+    const raw = window.localStorage.getItem(PRINTER_STORAGE_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    if (!data || typeof data.addr !== 'string' || !data.addr.trim()) return null
+    return {
+      addr: data.addr.trim().toUpperCase(),
+      name: typeof data.name === 'string' ? data.name : '',
+      isM1: !!data.isM1,
+      model: typeof data.model === 'string' ? data.model : '',
+    }
+  } catch {
+    return null
+  }
+}
+
+function persistPrinter(printer) {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return
+    if (!printer.addr) {
+      window.localStorage.removeItem(PRINTER_STORAGE_KEY)
+      return
+    }
+    window.localStorage.setItem(
+      PRINTER_STORAGE_KEY,
+      JSON.stringify({
+        addr: printer.addr,
+        name: printer.name || '',
+        isM1: !!printer.isM1,
+        model: printer.model || '',
+      }),
+    )
+  } catch {
+    /* localStorage 不可用（隐私模式）时忽略 */
+  }
+}
+
+const storedPrinter = readStoredPrinter()
+
 export const state = reactive({
   // 首次打开给一份可编辑的示例标签，便于直接看到 40×30 的真实排版效果；
   // 「新建」会得到空白标签。
@@ -50,6 +95,32 @@ export const state = reactive({
     error: '',
     spec: null,
   },
+  /** 当前选择的打印机（地址记住在 localStorage，下次打开仍显示） */
+  printer: {
+    addr: storedPrinter?.addr || '',
+    name: storedPrinter?.name || '',
+    isM1: storedPrinter?.isM1 || false,
+    model: storedPrinter?.model || '',
+    // idle | connecting | connected | error
+    phase: 'idle',
+    statusLabel: '',
+    error: '',
+    lastConnectedAt: 0,
+  },
+  /** 打印机扫描/选择弹窗 */
+  printerDialog: {
+    open: false,
+    loading: false,
+    scanning: false,
+    devices: [],
+    m1: null,
+    hint: '',
+    error: '',
+    scanned: false,
+    lastScan: 0,
+    connectingAddr: '',
+    connectError: null,
+  },
   printing: false,
   toasts: [],
 })
@@ -60,6 +131,29 @@ export const selectedItem = computed(
 
 export const spec = computed(() => toSpec(state.doc))
 export const specJson = computed(() => JSON.stringify(spec.value, null, 2))
+
+/** 当前打印机连接状态：未选 / 连接中 / 已连接 / 离线 */
+export const printerConnection = computed(() => {
+  if (!state.printer.addr) return { key: 'none', label: '未选' }
+  if (state.printer.phase === 'connecting') return { key: 'connecting', label: '连接中' }
+  if (state.printer.phase === 'connected' && state.backend.phase !== 'offline') {
+    return { key: 'connected', label: '已连接' }
+  }
+  return { key: 'offline', label: '离线' }
+})
+
+export const currentPrinterLabel = computed(() => {
+  if (!state.printer.addr) return ''
+  const name = state.printer.name || state.printer.addr
+  return name === state.printer.addr ? name : `${name} (${state.printer.addr})`
+})
+
+/** 打印机型号展示名（hprt-m1 → M1），不展示厂商名 */
+export const printerModelLabel = computed(() => {
+  const raw = String(state.printer.model || '').trim()
+  if (!raw) return 'M1'
+  return MODEL_NAMES[raw.toLowerCase()] || raw
+})
 
 /* ------------------------------------------------------------------ toast */
 
@@ -422,18 +516,226 @@ function markBackendOffline(error) {
   }
 }
 
+/* -------------------------------------------------------- 打印机扫描 / 连接 */
+
+function normalizeDevice(raw, m1Address) {
+  if (!raw || typeof raw !== 'object') return null
+  const address = String(raw.address || raw.addr || '').trim().toUpperCase()
+  if (!address) return null
+  const name = String(raw.name || raw.address || address).trim() || address
+  const isM1 = !!(
+    raw.is_m1 ||
+    raw.isM1 ||
+    (m1Address && String(m1Address).toUpperCase() === address) ||
+    /\bm1\b|hprt/i.test(name)
+  )
+  return { address, name, isM1 }
+}
+
+function applyDevicePayload(payload, scanned) {
+  const dialog = state.printerDialog
+  if (!payload || typeof payload !== 'object') {
+    dialog.error = '设备接口返回了无法识别的数据'
+    return
+  }
+  if (payload.ok === false) {
+    dialog.error = payload.error || '读取蓝牙设备失败'
+    if (scanned) dialog.devices = []
+    return
+  }
+  const m1 = payload.m1 && typeof payload.m1 === 'object' ? payload.m1 : null
+  const m1Address = m1 ? m1.address : ''
+  dialog.m1 = m1
+  const list = []
+  const seen = new Set()
+  const add = (raw) => {
+    const device = normalizeDevice(raw, m1Address)
+    if (!device || seen.has(device.address)) return
+    seen.add(device.address)
+    list.push(device)
+  }
+  if (m1) add(m1)
+  if (Array.isArray(payload.devices)) payload.devices.forEach(add)
+  if (Array.isArray(payload.known)) payload.known.forEach(add)
+  list.sort((a, b) => Number(b.isM1) - Number(a.isM1) || a.name.localeCompare(b.name))
+  dialog.devices = list
+  dialog.hint = typeof payload.hint === 'string' ? payload.hint : ''
+  dialog.scanned = scanned || dialog.scanned
+  dialog.lastScan = scanned ? Date.now() : dialog.lastScan
+}
+
+export function openPrinterDialog() {
+  state.printerDialog.open = true
+  if (state.printerDialog.devices.length === 0) {
+    loadKnownDevices()
+  }
+}
+
+export function closePrinterDialog() {
+  state.printerDialog.open = false
+  state.printerDialog.connectError = null
+}
+
+/** GET /api/devices — 已知设备（快，不主动扫描） */
+export async function loadKnownDevices() {
+  const dialog = state.printerDialog
+  dialog.loading = true
+  dialog.error = ''
+  try {
+    const payload = await api.fetchDevices()
+    applyDevicePayload(payload, false)
+  } catch (error) {
+    dialog.error = error.message || String(error)
+    markBackendOffline(error)
+  } finally {
+    dialog.loading = false
+  }
+}
+
+/** GET /api/scan?seconds=8 — 主动扫描蓝牙设备 */
+export async function scanPrinters(seconds = 8) {
+  const dialog = state.printerDialog
+  if (dialog.scanning) return
+  dialog.scanning = true
+  dialog.error = ''
+  try {
+    const payload = await api.scanDevices(seconds)
+    applyDevicePayload(payload, true)
+    const m1 = dialog.m1
+    showToast(
+      m1 ? `已找到打印机：${m1.name || m1.address}` : '扫描完成，未发现打印机',
+      m1 ? 'success' : 'warn',
+      3500,
+    )
+  } catch (error) {
+    dialog.error = error.message || String(error)
+    markBackendOffline(error)
+  } finally {
+    dialog.scanning = false
+  }
+}
+
+/** POST /api/connect — 连接并握手；失败时把后端 error 文案展示出来 */
+export async function connectPrinter(target) {
+  const dialog = state.printerDialog
+  const rawAddress =
+    typeof target === 'string' ? target : target?.address || target?.addr || ''
+  const addr = String(rawAddress).trim().toUpperCase()
+  if (!addr || dialog.connectingAddr) return null
+
+  const device = typeof target === 'object' && target ? target : null
+  const isCurrentPrinter =
+    !!state.printer.addr && state.printer.addr.toUpperCase() === addr
+  const previousPhase = state.printer.phase
+  dialog.connectingAddr = addr
+  dialog.connectError = null
+  // 只有首次连接 / 重连当前打印机时才把全局状态切到「连接中」，
+  // 尝试连接另一台设备失败时不会影响当前已连接打印机。
+  if (!state.printer.addr || isCurrentPrinter) {
+    state.printer.phase = 'connecting'
+    state.printer.error = ''
+  }
+
+  try {
+    const result = await api.connectDevice(addr)
+    if (!result || result.ok === false) {
+      throw new Error(
+        firstString(
+          result?.error,
+          Array.isArray(result?.errors) ? result.errors.join('、') : '',
+          result?.message,
+        ) || '连接失败（打印机可能被占用）',
+      )
+    }
+    state.printer.addr = addr
+    state.printer.name = firstString(result.name, device?.name, state.printer.name) || addr
+    state.printer.isM1 = !!device?.isM1 || /\bm1\b|hprt/i.test(state.printer.name)
+    state.printer.model = firstString(result.model, state.printer.model) || 'M1'
+    state.printer.statusLabel = firstString(result.status, result.message) || '已连接'
+    state.printer.error = firstString(
+      Array.isArray(result.errors) ? result.errors.join('、') : result.error,
+    )
+    state.printer.phase = 'connected'
+    state.printer.lastConnectedAt = Date.now()
+    state.backend.phase = 'online'
+    state.backend.info = normalizeStatus({
+      ...result,
+      model: result.model || 'hprt-m1',
+    })
+    state.backend.error = ''
+    persistPrinter(state.printer)
+    showToast(
+      `已连接打印机 ${state.printer.name}（${state.printer.statusLabel}）`,
+      'success',
+      3500,
+    )
+    window.setTimeout(() => {
+      if (state.printer.addr === addr) refreshStatus()
+    }, 1200)
+    return state.printer
+  } catch (error) {
+    const message = error.message || String(error)
+    const stillCurrentPrinter =
+      !!state.printer.addr && state.printer.addr.toUpperCase() === addr
+    dialog.connectError = { addr, message }
+    if (!state.printer.addr || stillCurrentPrinter) {
+      state.printer.phase = 'error'
+      state.printer.error = message
+    } else {
+      state.printer.phase = previousPhase
+    }
+    showToast(`连接失败：${message}`, 'error', 7000)
+    markBackendOffline(error)
+    return null
+  } finally {
+    dialog.connectingAddr = ''
+  }
+}
+
+export function clearPrinterSelection() {
+  state.printer.addr = ''
+  state.printer.name = ''
+  state.printer.isM1 = false
+  state.printer.model = ''
+  state.printer.phase = 'idle'
+  state.printer.statusLabel = ''
+  state.printer.error = ''
+  state.printerDialog.connectError = null
+  persistPrinter(state.printer)
+  showToast('已清除打印机选择', 'info', 2200)
+}
+
+/** 打印/预览前必须已选择打印机 */
+function ensurePrinterSelected() {
+  if (state.printer.addr) return true
+  showToast('请先选择打印机', 'warn', 4500)
+  openPrinterDialog()
+  return false
+}
+
 export async function refreshStatus() {
   if (state.backend.phase === 'checking') return
+  if (state.printer.phase === 'connecting') return
   state.backend.phase = 'checking'
   try {
-    const raw = await api.fetchStatus()
+    const raw = await api.fetchStatus(state.printer.addr || undefined)
     state.backend.info = normalizeStatus(raw)
     state.backend.error = ''
     state.backend.phase = 'online'
+    if (state.printer.addr && state.backend.info) {
+      const info = state.backend.info
+      state.printer.phase = info.online ? 'connected' : 'error'
+      if (info.stateLabel) state.printer.statusLabel = info.stateLabel
+      state.printer.error = info.errors?.length ? info.errors.join('、') : ''
+    }
   } catch (error) {
     state.backend.info = null
     state.backend.phase = 'offline'
     state.backend.error = error.message || '无法连接后端'
+    if (state.printer.addr) {
+      state.printer.phase = 'error'
+      state.printer.error = state.backend.error
+    }
   } finally {
     state.backend.lastCheck = Date.now()
   }
@@ -443,7 +745,7 @@ export async function learnPaper() {
   if (state.backend.learning) return
   state.backend.learning = true
   try {
-    await api.learnPaper()
+    await api.learnPaper(state.printer.addr || undefined)
     showToast('已发送测纸指令，请观察打印机是否走纸并重新定位', 'success', 5000)
     window.setTimeout(() => refreshStatus(), 2500)
   } catch (error) {
@@ -484,6 +786,7 @@ function releasePreviewUrl() {
 }
 
 export async function openPreview() {
+  if (!ensurePrinterSelected()) return
   state.preview.open = true
   await refreshPreview()
 }
@@ -494,7 +797,7 @@ export async function refreshPreview() {
   preview.error = ''
   releasePreviewUrl()
   preview.url = ''
-  preview.spec = toSpec(state.doc)
+  preview.spec = { addr: state.printer.addr, ...toSpec(state.doc) }
   try {
     const result = await api.fetchPreview(preview.spec)
     preview.url = result.url
@@ -518,9 +821,14 @@ export function closePreview() {
 
 export async function printLabel() {
   if (state.printing) return
+  if (!ensurePrinterSelected()) return
   state.printing = true
   try {
-    const payload = { ...toSpec(state.doc), copies: Math.max(1, Math.min(99, Number(state.copies) || 1)) }
+    const payload = {
+      addr: state.printer.addr,
+      ...toSpec(state.doc),
+      copies: Math.max(1, Math.min(99, Number(state.copies) || 1)),
+    }
     const result = await api.printLabel(payload)
     const message =
       result && typeof result === 'object'

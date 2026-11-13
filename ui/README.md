@@ -11,6 +11,7 @@
 - 右：所选元素 / 标签属性（含纸卷偏移说明）+ 实时 spec JSON
 - 顶：品牌、新建、打开/保存 JSON、标签预设、**纸卷偏移 / 垂直微调 / 底部少走**、份数、浓度、对齐、预览、打印
 - 画布顶部 4mm 为**硬件不可打印区**（红色斜纹带），元素 Y 坐标从 4mm 起算
+- 打印机：状态栏入口 → **扫描蓝牙 / 选择 / 连接**，记住上次选择（localStorage），预览/打印请求自动带 `addr`
 - 底：打印机状态（型号 / 状态 / 错误）、刷新、测纸、**偏移与位图尺寸**
 
 后端按「纸卷偏移 + 标签宽」渲染的真实 PNG 预览（40mm 纸 + 10mm 偏移 = 400 × 240 px）：
@@ -26,6 +27,10 @@
 标签顶部 4mm 是硬件打印不到的区域：画布用红色斜纹带标出，排版时元素 Y 坐标一律从 4mm 起算：
 
 ![顶部 4mm 不可打印区](./docs/top-margin.png)
+
+点击状态栏左侧的「当前打印机 / 选择打印机」芯片，可扫描蓝牙设备并连接（M1 高亮、记住上次选择）：
+
+![打印机扫描与连接](./docs/printer-dialog.png)
 
 调整「垂直微调」时，标签区域顶部/底部会出现一条黄色虚线，提示可能被裁切的方向（不改变网格与元素坐标）：
 
@@ -59,7 +64,7 @@ ui/
 ├── index.html            # 入口 HTML（中文 lang、原创 favicon）
 ├── package.json          # name: gofor-label-print，仅 vue + vite + @vitejs/plugin-vue
 ├── vite.config.js
-├── docs/                 # 自测截图（editor / top-margin / offset-y / trim-bottom / preview / offline-preview）
+├── docs/                 # 自测截图（editor / printer-dialog / top-margin / offset-y / trim-bottom / preview / offline-preview）
 ├── README.md
 └── src/
     ├── main.js
@@ -75,6 +80,7 @@ ui/
     │   ├── LabelElement.vue    # 文本（逐行渲染）、条码/二维码 SVG 示意
     │   ├── PropertyPanel.vue   # 右侧属性面板 + spec JSON
     │   ├── StatusBar.vue       # 打印机状态栏
+    │   ├── PrinterDialog.vue   # 打印机扫描 / 选择 / 连接弹窗
     │   ├── PreviewDialog.vue   # 预览弹窗
     │   ├── ToastStack.vue
     │   └── AppIcon.vue         # 原创 24×24 线稿图标
@@ -120,7 +126,20 @@ M1 的**纸筒挡板在左侧、纸筒仓宽 50mm**：装入 40mm 卷纸后，�
 
 ---
 
-## 3. 单位与坐标（为什么不会再「文字显示不全 / 宽高反了」）
+## 3. 打印机扫描 / 选择 / 连接
+
+首次使用或换机时，点击状态栏左侧的「当前打印机 / 选择打印机」芯片打开弹窗：
+
+1. 打开时自动读取 **已知设备**（`GET /api/devices`，快）；点「扫描蓝牙设备」调用 `GET /api/scan?seconds=8` 主动扫描（按钮显示「扫描中…（约 8 秒）」并禁用）。
+2. 设备列表显示「名称 + 地址」，**M1 设备高亮并带「M1」徽标**；每行「连接」调用 `POST /api/connect`（body `{"addr":"..."}`）。
+3. 连接成功：行内显示 ✅「已连接 · M1 · 正常」；失败：行内展示后端返回的原始 error 文案（打印机可能被占用，busy 属正常现象），不会白屏。
+4. **记住最近选择**：地址/名称/型号写入 `localStorage`（key `gofor-label-printer-v1`），下次打开自动显示在状态栏并查询该机状态。
+5. **预览与打印必须先选打印机**：未选时点击会 toast「请先选择打印机」并自动打开本弹窗；请求体统一带上 `addr`（`{"addr": "...", ...spec}`）。`/api/preview` 会忽略 addr，`/api/print` 用 addr 指定目标机；状态查询与测纸也会带当前地址。
+6. 后端离线：状态栏显示「后端未启动 / 离线」，弹窗顶部红色横幅「后端未启动或无法连接…」并提供「重试」，页面正常渲染。
+
+---
+
+## 4. 单位与坐标（为什么不会再「文字显示不全 / 宽高反了」）
 
 | 概念 | 规则 |
 | --- | --- |
@@ -136,7 +155,7 @@ M1 的**纸筒挡板在左侧、纸筒仓宽 50mm**：装入 40mm 卷纸后，�
 
 ---
 
-## 4. 与后端联调
+## 5. 与后端联调
 
 后端（M1 REST 打印服务，位于仓库 `server/`）默认监听 **http://127.0.0.1:17600**。
 前端 API 基址可用环境变量覆盖（构建时注入）：
@@ -148,12 +167,16 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 
 | 方法 | 路径 | 用途 | 前端处理 |
 | --- | --- | --- | --- |
-| `GET` | `/api/status` | 打印机型号/状态/错误 | 进入页面即请求，之后每 15s 轮询；状态栏绿/黄/红点 |
-| `POST` | `/api/preview` | 传 spec，返回 PNG | 兼容 `image/png` 二进制与 JSON（`image`/`base64`/`png`/`data`）；弹窗显示，可保存 PNG |
-| `POST` | `/api/print` | 传 spec + `copies`，真正打印 | 成功 toast，失败 toast + 状态栏离线提示 |
-| `POST` | `/api/learn` | 测纸 / 重新定位（会走纸！） | 状态栏「测纸」按钮，成功/失败 toast |
+| `GET` | `/api/status?addr=` | 指定打印机型号/状态/错误 | 进入页面即请求（带当前 addr），之后每 15s 轮询；状态栏 `未选 / 已连接 / 离线` |
+| `GET` | `/api/devices` | 已知蓝牙设备（快，不扫描） | 打开打印机弹窗时自动读取，显示名称/地址 |
+| `GET` | `/api/scan?seconds=8` | 主动扫描蓝牙设备 | 「扫描蓝牙设备」按钮；扫描中禁用并显示 loading |
+| `POST` | `/api/connect` | 连接指定地址并握手（body `{"addr":...}`） | 设备行「连接」；成功显示型号/状态，失败展示后端 error 原文 |
+| `POST` | `/api/preview` | 传 spec（含 `addr`），返回 PNG | 兼容 `image/png` 与 JSON base64；弹窗显示，可保存 PNG |
+| `POST` | `/api/print` | 传 spec + `addr` + `copies`，真正打印 | 成功 toast，失败 toast + 状态栏离线提示 |
+| `POST` | `/api/learn` | 测纸 / 重新定位（会走纸！） | 状态栏「测纸」按钮（带当前 addr），成功/失败 toast |
 
 - 后端已返回 `Access-Control-Allow-Origin: *`，本地 `5173 → 17600` 跨域可直接工作（自测验证）。
+- 预览/打印请求体以 `addr` 开头：`{"addr":"<当前打印机蓝牙地址>", ...spec}`；未选择打印机时前端会拦截并提示「请先选择打印机」。
 - 请求超时：状态 4.5s、预览 20s、打印 25s、测纸 20s。
 - **后端未启动时的降级行为**（已验证）：
   - 状态栏红点 + 「后端未启动」+ 具体网络错误，不白屏；
@@ -170,7 +193,7 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 
 ---
 
-## 5. 标签 spec 契约（前后端严格一致）
+## 6. 标签 spec 契约（前后端严格一致）
 
 编辑器导出的 JSON 只包含契约字段（`id`、名称、缩放等编辑器内部状态不会导出）：
 
@@ -222,7 +245,7 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 
 ---
 
-## 6. 操作说明
+## 7. 操作说明
 
 | 操作 | 方式 |
 | --- | --- |
@@ -231,6 +254,7 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 | 移动 | 鼠标拖动（1mm 吸附；`Shift` 为 0.1mm；方向键 1mm，`Shift`+方向键 0.2mm） |
 | 删除 / 复制 | `Delete` / `Ctrl+D` |
 | 修改参数 | 右侧属性面板（内容、字号、加粗、对齐、反白、条码符号/高度/文字、二维码尺寸） |
+| 打印机 | 点击状态栏「当前打印机 / 选择打印机」芯片 → 扫描 → 连接；选择会记在 localStorage |
 | 纸卷偏移 | 顶部工具条或右侧「标签设置 → 纸卷偏移 mm」，40mm 纸填 10、50mm 纸填 0 |
 | 垂直微调 | 顶部工具条或右侧「垂直微调 mm」：正 = 内容下移、负 = 上移（-15~15，步进 0.5） |
 | 底部少走 | 顶部工具条或右侧「底部少走 mm」：打印后少走多少 mm，等效回退（0~5，默认 0，可手动调 1~2） |
@@ -243,9 +267,9 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 
 ---
 
-## 7. 自测结果（2026-11-13，本机）
+## 8. 自测结果（2026-11-13，本机）
 
-### 7.1 命令
+### 8.1 命令
 
 ```text
 $ cd ui && npm install
@@ -255,16 +279,16 @@ $ npm run build
 vite v7.3.8 building client environment for production...
 ✓ 23 modules transformed.
 dist/index.html                   1.07 kB │ gzip:  0.65 kB
-dist/assets/index-D-dVnwFw.css   21.15 kB │ gzip:  5.31 kB
-dist/assets/index-BE4FBURa.js   134.80 kB │ gzip: 50.38 kB
-✓ built in 627ms
+dist/assets/index-B7TyVxjj.css   24.73 kB │ gzip:  5.89 kB
+dist/assets/index-Bs8V6oZK.js   146.78 kB │ gzip: 53.94 kB
+✓ built in 626ms
 
 $ npm run dev        # VITE v7.3.8 ready → http://127.0.0.1:5173/
 $ curl -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/           # 200
 $ curl -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/src/main.js # 200
 ```
 
-### 7.2 浏览器实测（Playwright Chromium，1440 × 900）
+### 8.2 浏览器实测（Playwright Chromium，1440 × 900）
 
 | 项目 | 结果 |
 | --- | --- |
@@ -282,26 +306,33 @@ $ curl -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/src/main.js # 200
 | 顶部 4mm 禁区 | 画布顶部红色斜纹带高 64px（4mm×8×2，占标签高 13.3%），标注「顶部 4 mm 硬件打印不到」；默认模板元素 y = 4 / 9.5 / 14；属性面板提示「元素 Y 从 4mm 起算」 |
 | Y 坐标约束 | Y 输入 1 → 自动夹到 4；向上拖拽出界 → 仍为 4；新增元素 y ≥ 4；旧 JSON 元素 y=1 → 自动下移到 4（无元素进入顶部禁区） |
 | 顶部提示 | 工具条「标签」旁 i 点击/悬浮显示「顶部 4mm 为不可打印区…」并为黄色 toast；状态栏常显「顶部留白 4 mm」 |
+| 打印机入口 | 未选时状态栏「选择打印机 / 未选」；点击打开弹窗并自动读取已知设备（M1-c753 + Surface Dial），M1 行高亮 + 「M1」徽标 |
+| 扫描 | 点击「扫描蓝牙设备」→「扫描中…（约 8 秒）」+ 禁用/转圈；完成后列表刷新；后端离线时横幅提示 + 重试 |
+| 连接 | M1「连接」→「连接中…」→ ✅ 已连接 · M1 · 正常；状态栏「当前打印机：M1-c753（06:41:F4:57:C7:53）已连接」；localStorage 写入，刷新页面后仍显示并自动查询状态 |
+| 连接失败 | mock 后端 busy：`{"ok":false,"error":"设备忙：…"}` → 行内显示后端原始文案 + 失败 toast；连接另一台失败不影响当前已连接打印机 |
+| 选机约束 | 未选打印机点预览 → toast「请先选择打印机」并打开打印机弹窗（预览不打开）；选机后 preview/print 请求体均以 `addr` 开头（实测捕获） |
+| 离线降级 | 后端离线 → 状态栏「后端未启动」+ 连接状态「离线」；弹窗红色横幅「后端未启动或无法连接…」+「重试」；页面正常渲染 |
 | 默认值 | spec 顶层 `offset_y_mm: 0`、`trim_bottom_mm: 0`（无底部 trim 提示带） |
 | 底部少走 | 默认 0 → 无底部提示带；设 3 → 红色斜纹带高 48px（10%）；设 0 → 带消失；内容伸入修剪区（trim=5，内容底 26.4mm > 边界 25mm）→ 属性面板黄色告警 |
 | 底部少走兼容 | 打开无 `trim_bottom_mm` 的旧 JSON → 自动按 0，输入框与 spec 均为 0 |
-| 后端预览 | `POST /api/preview` 请求体含 `offset_x_mm: 10`、`offset_y_mm: 0`、`trim_bottom_mm: 0` → 仍返回 **400 × 240** 完整 PNG，弹窗正常显示 |
-| 打印请求 | 用 mock 的 `/api/print` 捕获请求体：含 `offset_x_mm: 10`、`offset_y_mm: 0`、`trim_bottom_mm: 0` 与 `copies`，toast「打印任务已发送」；**未触发真机出纸** |
+| 后端预览 | `POST /api/preview` 请求体以 `addr` 开头，含 `offset_x_mm: 10`、`offset_y_mm: 0`、`trim_bottom_mm: 0` → 返回 **400 × 240** 完整 PNG，弹窗正常显示 |
+| 打印请求 | 用 mock 的 `/api/print` 捕获请求体：含 `addr`、`offset_x_mm: 10`、`offset_y_mm: 0`、`trim_bottom_mm: 0` 与 `copies`，toast「打印任务已发送」；**未触发真机出纸** |
 | 几何上限 | 50mm 标签 + 20mm 偏移 = 70mm/560dot → 属性面板黄色告警「超过 400px 位图上限…」 |
 | 离线降级 | 拦截后端请求 → 预览弹窗「无法连接后端服务…」+「重试」，状态栏「后端未启动」，无白屏 |
 | 控制台 | 无 Vue / JS 运行时异常（后端离线时的 `ERR_CONNECTION_REFUSED` 网络日志属预期） |
 
 ---
 
-## 8. 已知限制 / 后续计划
+## 9. 已知限制 / 后续计划
 
 - 画布中条码/二维码是**示意占位**，不是可扫描编码；条码示意宽度为启发式估算，实际打印宽度以后端 zint 为准（请以「预览 PNG」核对）。
 - 暂无撤销/重做与多标签页；可后续基于 store 快照补充。
 - 未包含 Electron 打包壳（可选，不影响 `npm run dev` / `build`）。
 - 界面按桌面使用设计，最小宽度约 1024px；移动端未适配。
 - 打印机型号默认 M1；换机型时后端 `/api/models` 可扩展，前端会按 `/api/status` 返回的型号展示。
+- 打印机需先在系统蓝牙中配对一次；扫描依赖 BlueZ/bluetoothctl，连接可能因设备被占用（busy）失败，此时 UI 会直接展示后端 error 文案，重试即可。
 
-## 9. 品牌与原创声明
+## 10. 品牌与原创声明
 
 产品品牌统一为 **共风 GoFor Label Print**（仓库 `label-print`，前端包 `gofor-label-print`）。
 本目录代码与 SVG 图标均为原创实现，未复制任何厂商界面、代码或图片资源；

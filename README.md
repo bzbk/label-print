@@ -66,7 +66,16 @@ npm run dev          # http://127.0.0.1:5173
 # 或构建静态文件：npm run build  (产物在 ui/dist)
 ```
 
-### 3) 打印机准备
+### 3) 桌面客户端（Electron，可选）
+
+```bash
+cd ui && npm run build
+electron43 ui/electron/main.cjs               # 自动拉起后端并加载 dist
+GOFOR_DEV=1 electron43 ui/electron/main.cjs   # 开发模式（需先 npm run dev）
+```
+
+> Electron 壳会自动启动 `server` 并检测 `127.0.0.1:17600`；没有系统 electron 时可用 `npx electron`。
+
 
 1. 打印机开机，系统蓝牙里能看到 `M1-xxxx`（`bluetoothctl devices`）。
 2. 首次连接或换纸后执行一次**测纸**（设计器底部「测纸」按钮，或 `POST /api/learn`）。

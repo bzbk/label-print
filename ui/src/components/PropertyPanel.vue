@@ -249,27 +249,53 @@ function onPresetChange(event) {
           <option v-for="entry in LABEL_PRESETS" :key="entry.id" :value="entry.id">{{ entry.label }}</option>
         </select>
       </label>
-      <label class="field field--stack">
-        <span class="field-label">
-          纸卷偏移（mm）
-          <span
-            class="info-dot"
-            title="M1 纸筒挡板在左侧、纸仓 50mm：40mm 卷纸需整体右移 10mm（默认），50mm 卷纸填 0。该值写入 spec.offset_x_mm，后端按打印头坐标渲染位图（宽 = 偏移 + 标签宽）。"
-            >i</span
-          >
-        </span>
-        <input
-          type="number"
-          min="0"
-          max="20"
-          step="0.5"
-          :value="state.doc.offset_x_mm"
-          @change="updateDoc({ offset_x_mm: Number($event.target.value) })"
-        />
-      </label>
+      <div class="field-grid">
+        <label class="field">
+          <span class="field-label">
+            纸卷偏移（mm）
+            <span
+              class="info-dot"
+              title="M1 纸筒挡板在左侧、纸仓 50mm：40mm 卷纸需整体右移 10mm（默认），50mm 卷纸填 0。该值写入 spec.offset_x_mm，后端按打印头坐标渲染位图（宽 = 偏移 + 标签宽）。"
+              >i</span
+            >
+          </span>
+          <input
+            type="number"
+            min="0"
+            max="20"
+            step="0.5"
+            :value="state.doc.offset_x_mm"
+            @change="updateDoc({ offset_x_mm: Number($event.target.value) })"
+          />
+        </label>
+        <label class="field">
+          <span class="field-label">
+            垂直微调（mm）
+            <span
+              class="info-dot"
+              title="内容整体上下微调，不影响间隙检测；正=下移，负=上移（范围 -15~15mm，步进 0.5）"
+              >i</span
+            >
+          </span>
+          <input
+            type="number"
+            min="-15"
+            max="15"
+            step="0.5"
+            :value="state.doc.offset_y_mm"
+            @change="updateDoc({ offset_y_mm: Number($event.target.value) })"
+          />
+        </label>
+      </div>
       <p class="readout">
         40 mm 卷纸 = 10 · 50 mm 卷纸 = 0。位图宽
         {{ bitmapDotW }} px（{{ bitmapMm }} mm = 偏移 {{ offsetMm }} + 标签 {{ state.doc.width_mm }}）。
+      </p>
+      <p class="readout">
+        垂直微调：正 = 内容下移、负 = 内容上移；不影响间隙检测，位图高度不变（{{
+          Math.round(state.doc.height_mm * 8)
+        }}
+        dot），超出标签的内容会被裁切。
       </p>
       <label class="field field--stack">
         打印对齐

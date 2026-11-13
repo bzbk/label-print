@@ -3,6 +3,8 @@ import vue from '@vitejs/plugin-vue'
 
 // 纯 vue + vite：不引入 konva/fabric 等重型画布库，画布用 DOM + CSS 绝对定位实现。
 export default defineConfig({
+  // Electron 用 file:// 加载 dist，必须用相对资源路径
+  base: './',
   plugins: [vue()],
   server: {
     host: '127.0.0.1',

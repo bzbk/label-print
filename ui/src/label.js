@@ -58,10 +58,24 @@ export function snapOffsetX(value) {
   return round1(clamp(snapped, OFFSET_X_MM.min, OFFSET_X_MM.max))
 }
 
+/**
+ * 垂直微调：内容整体上下平移，用于补偿标签在打印头上的纵向位置偏差。
+ * 范围 -15 ~ 15mm，步进 0.5；正 = 下移，负 = 上移；位图高度不变。
+ */
+export const OFFSET_Y_MM = { default: 0, min: -15, max: 15, step: 0.5 }
+
+export function snapOffsetY(value) {
+  const n = Number(value)
+  const source = Number.isFinite(n) ? n : OFFSET_Y_MM.default
+  const snapped = Math.round(source / OFFSET_Y_MM.step) * OFFSET_Y_MM.step
+  return round1(clamp(snapped, OFFSET_Y_MM.min, OFFSET_Y_MM.max))
+}
+
 export const LIMITS = {
   width_mm: [10, 72],
   height_mm: [10, 300],
   offset_x_mm: [0, 20],
+  offset_y_mm: [-15, 15],
   textSize: [6, 120],
   barcodeHeight: [4, 40],
   qrSize: [6, 60],
@@ -74,6 +88,7 @@ export function createDoc(patch = {}) {
     height_mm: 30,
     border: false,
     offset_x_mm: OFFSET_X_MM.default,
+    offset_y_mm: OFFSET_Y_MM.default,
     density: 75,
     align: 'left',
     items: [],
@@ -283,6 +298,7 @@ export function toSpec(doc) {
     height_mm: round1(doc.height_mm),
     border: !!doc.border,
     offset_x_mm: snapOffsetX(doc.offset_x_mm ?? OFFSET_X_MM.default),
+    offset_y_mm: snapOffsetY(doc.offset_y_mm ?? OFFSET_Y_MM.default),
     density: DENSITIES.includes(Number(doc.density)) ? Number(doc.density) : 75,
     items: doc.items.map(itemToSpec),
   }
@@ -312,6 +328,7 @@ export function fromSpec(raw) {
     height_mm: clamp(round1(height), LIMITS.height_mm[0], LIMITS.height_mm[1]),
     border: !!raw.border,
     offset_x_mm: snapOffsetX(raw.offset_x_mm ?? OFFSET_X_MM.default),
+    offset_y_mm: snapOffsetY(raw.offset_y_mm ?? OFFSET_Y_MM.default),
     density: DENSITIES.includes(Number(raw.density)) ? Number(raw.density) : 75,
     align: ['left', 'center', 'right'].includes(raw.align) ? raw.align : 'left',
     items: [],

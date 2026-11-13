@@ -15,6 +15,8 @@ let resizeTimer = null
 
 /** 纸卷偏移：40mm 卷纸在 50mm 纸仓中相对打印头原点右移 10mm；内容从偏移线之后开始 */
 const offsetMm = computed(() => Number(doc.value.offset_x_mm) || 0)
+const offsetY = computed(() => Number(doc.value.offset_y_mm) || 0)
+const absOffsetY = computed(() => Math.abs(offsetY.value))
 const totalMm = computed(() => round1(doc.value.width_mm + offsetMm.value))
 const labelDotW = computed(() => doc.value.width_mm * DOT_PER_MM)
 const totalDotW = computed(() => (doc.value.width_mm + offsetMm.value) * DOT_PER_MM)
@@ -236,6 +238,18 @@ onBeforeUnmount(() => {
                 @pointerdown="onItemPointerDown($event, item)"
               />
 
+              <!-- 垂直微调：只在可能被裁切的一侧画一条虚线提示，不改变网格/元素坐标 -->
+              <div
+                v-if="offsetY !== 0"
+                class="v-offset-hint"
+                :class="offsetY > 0 ? 'is-down' : 'is-up'"
+                :title="`内容整体${offsetY > 0 ? '下移' : '上移'} ${absOffsetY} mm，打印时${offsetY > 0 ? '底部' : '顶部'}可能被裁切（位图高度不变）`"
+              >
+                <span class="v-offset-tag">
+                  内容{{ offsetY > 0 ? '下移' : '上移' }} {{ absOffsetY }} mm · {{ offsetY > 0 ? '底部' : '顶部' }}可能被裁切
+                </span>
+              </div>
+
               <div
                 v-if="doc.border"
                 class="label-border"
@@ -257,6 +271,7 @@ onBeforeUnmount(() => {
             位图 {{ totalDotW }} × {{ dotH }} dot @ 203dpi
             <span>·</span>
             打印头坐标 0–{{ totalMm }} mm
+            <span v-if="offsetY !== 0">· 垂直微调 {{ offsetY }} mm</span>
           </div>
         </div>
       </div>

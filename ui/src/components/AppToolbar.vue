@@ -55,6 +55,10 @@ function onCopiesChange(event) {
 function onOffsetChange(event) {
   updateDoc({ offset_x_mm: Number(event.target.value) })
 }
+
+function onOffsetYChange(event) {
+  updateDoc({ offset_y_mm: Number(event.target.value) })
+}
 </script>
 
 <template>
@@ -113,6 +117,23 @@ function onOffsetChange(event) {
         step="0.5"
         :value="state.doc.offset_x_mm"
         @change="onOffsetChange"
+      />
+      <span class="toolbar-suffix">mm</span>
+    </label>
+
+    <label
+      class="toolbar-field"
+      title="内容整体上下微调，不影响间隙检测；正=下移，负=上移（范围 -15~15mm，步进 0.5）"
+    >
+      <span>垂直微调</span>
+      <input
+        class="toolbar-num"
+        type="number"
+        min="-15"
+        max="15"
+        step="0.5"
+        :value="state.doc.offset_y_mm"
+        @change="onOffsetYChange"
       />
       <span class="toolbar-suffix">mm</span>
     </label>

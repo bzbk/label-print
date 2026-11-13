@@ -626,6 +626,47 @@ kbd {
   writing-mode: vertical-rl;
 }
 
+/* 垂直微调提示：只在风险侧画虚线，不改网格/坐标 */
+.v-offset-hint {
+  position: absolute;
+  right: 0;
+  left: 0;
+  z-index: 7;
+  height: 0;
+  pointer-events: none;
+}
+
+.v-offset-hint.is-down {
+  bottom: 0;
+  border-top: 2px dashed #d97706;
+}
+
+.v-offset-hint.is-up {
+  top: 0;
+  border-bottom: 2px dashed #d97706;
+}
+
+.v-offset-tag {
+  position: absolute;
+  right: 4px;
+  padding: 1px 5px;
+  border: 1px solid #fde68a;
+  border-radius: 4px;
+  background: rgba(255, 251, 235, 0.94);
+  color: #b45309;
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.v-offset-hint.is-down .v-offset-tag {
+  bottom: 4px;
+}
+
+.v-offset-hint.is-up .v-offset-tag {
+  top: 4px;
+}
+
 /* 标签区域：网格 / 元素 / 边框只画在这里 */
 .label-region {
   position: absolute;

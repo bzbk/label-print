@@ -28,7 +28,7 @@ export function newId() {
 }
 
 export const LABEL_PRESETS = [
-  { id: '40x30', label: '40 × 30 mm（默认）', width_mm: 40, height_mm: 30 },
+  { id: '40x30', label: '40 × 30 mm', width_mm: 40, height_mm: 30 },
   { id: '40x60', label: '40 × 60 mm', width_mm: 40, height_mm: 60 },
   { id: '50x30', label: '50 × 30 mm', width_mm: 50, height_mm: 30 },
   { id: 'custom', label: '自定义尺寸…', width_mm: null, height_mm: null },
@@ -123,7 +123,7 @@ export function createItem(type, doc = createDoc(), patch = {}) {
       align: 'left',
       invert: false,
       x_mm: 2,
-      y_mm: 2,
+      y_mm: PRINT_ZONE_TOP_MM,
       ...patch,
     }
   }
@@ -145,7 +145,7 @@ export function createItem(type, doc = createDoc(), patch = {}) {
       data: 'https://gofor.example/label',
       size_mm: 14,
       x_mm: 2,
-      y_mm: 2,
+      y_mm: PRINT_ZONE_TOP_MM,
       ...patch,
     }
   }
@@ -213,6 +213,38 @@ export function itemBoxMm(item, doc) {
   return { w_mm: size, h_mm: size, layout: null }
 }
 
+/**
+ * 硬件可打印区域（实测）：打印起点距标签顶部 4mm，底部 1mm 也不可打印。
+ * 40×30 标签 → 可打印区 y = 4 ~ 29mm（25mm）。仅用于画布标注/软提示，不限制拖拽。
+ */
+export const PRINT_ZONE_TOP_MM = 4
+export const PRINT_ZONE_BOTTOM_MM = 1
+
+export function printableZoneMm(doc) {
+  const height = Number(doc?.height_mm) || 0
+  const topMm = PRINT_ZONE_TOP_MM
+  const bottomMm = round1(Math.max(topMm, height - PRINT_ZONE_BOTTOM_MM))
+  return {
+    topMm,
+    bottomMm,
+    heightMm: round1(Math.max(0, bottomMm - topMm)),
+  }
+}
+
+/** 元素是否超出可打印区域（y < top 或 y + 高度 > bottom）；软提示，不阻止保存/打印 */
+export function itemOutsidePrintable(item, doc) {
+  const box = itemBoxMm(item, doc)
+  const zone = printableZoneMm(doc)
+  const y = Number(item.y_mm) || 0
+  return {
+    zone,
+    box,
+    outside: y < zone.topMm - 0.05 || y + box.h_mm > zone.bottomMm + 0.05,
+    above: y < zone.topMm - 0.05,
+    below: y + box.h_mm > zone.bottomMm + 0.05,
+  }
+}
+
 /** 是否超出标签范围（超出部分打印会被裁掉，画布上给出红色告警） */
 export function itemOverflow(item, doc) {
   const box = itemBoxMm(item, doc)
@@ -238,7 +270,7 @@ export function normalizeItemPosition(item, doc) {
 /** 新增元素时按纵向顺序摆放（避开已有元素） */
 export function autoPlaceItem(item, doc) {
   const box = itemBoxMm(item, doc)
-  let y = 2
+  let y = PRINT_ZONE_TOP_MM
   for (const other of doc.items) {
     const otherBox = itemBoxMm(other, doc)
     y = Math.max(y, (Number(other.y_mm) || 0) + otherBox.h_mm + 1.5)
@@ -391,7 +423,7 @@ export function templateDoc(name = 'material') {
       border: true,
       density: 75,
       items: [
-        createItem('text', null, { text: '收件城市：上海', size: 20, bold: true, x_mm: 2, y_mm: 2 }),
+        createItem('text', null, { text: '收件城市：上海', size: 20, bold: true, x_mm: 2, y_mm: PRINT_ZONE_TOP_MM }),
         createItem('text', null, { text: '运单号 SF1234567890', size: 14, x_mm: 2, y_mm: 7.5 }),
         createItem('barcode', null, {
           data: 'SF1234567890',
@@ -415,7 +447,7 @@ export function templateDoc(name = 'material') {
     border: false,
     density: 75,
     items: [
-      createItem('text', null, { text: '物料 A', size: 22, bold: true, x_mm: 2, y_mm: 2 }),
+      createItem('text', null, { text: '物料 A', size: 22, bold: true, x_mm: 2, y_mm: PRINT_ZONE_TOP_MM }),
       createItem('text', null, { text: '规格 24×18 mm', size: 15, x_mm: 2, y_mm: 7.5 }),
       createItem('barcode', null, {
         data: 'ABC123456',

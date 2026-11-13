@@ -24,6 +24,7 @@ import {
   toSpec,
 } from '../label'
 import { clamp, round1 } from '../units'
+import { prepareImageForPrint } from '../imagePrint'
 
 const MAX_TOASTS = 4
 let toastSeq = 0
@@ -164,6 +165,24 @@ export const state = reactive({
     written: [],
     error: '',
     lastWrittenAt: 0,
+  },
+  /** 导入图片 / SVG 打印 */
+  imagePrint: {
+    open: false,
+    processing: false,
+    printing: false,
+    fileName: '',
+    kind: '',
+    previewUrl: '',
+    uploadBlob: null,
+    uploadName: '',
+    widthMm: 0,
+    heightMm: 0,
+    offsetMm: 0,
+    fullWidthPx: 0,
+    labelWidthPx: 0,
+    labelHeightPx: 0,
+    error: '',
   },
   /** 打印机扫描/选择弹窗 */
   printerDialog: {
@@ -920,6 +939,95 @@ export function closePreview() {
   state.preview.loading = false
   state.preview.url = ''
   state.preview.error = ''
+}
+
+/* ------------------------------------------------------- 导入图片 / SVG 打印 */
+
+/**
+ * 处理用户选择的 PNG / JPG / SVG：
+ * - SVG（以及其他图片）在浏览器端栅格化为「标签区域」PNG；
+ * - 预览使用包含纸卷偏移的最终位图（offset+width 宽）；
+ * - 打开确认弹窗，用户点「打印图片」后才上传。
+ */
+export async function processImageFile(file) {
+  if (!file) return false
+  if (!ensurePrinterSelected()) return false
+  const imagePrint = state.imagePrint
+  imagePrint.processing = true
+  imagePrint.error = ''
+  try {
+    const result = await prepareImageForPrint(file, {
+      widthMm: state.doc.width_mm,
+      heightMm: state.doc.height_mm,
+      offsetMm: state.doc.offset_x_mm,
+    })
+    imagePrint.fileName = file.name || 'image'
+    imagePrint.kind = result.kind
+    imagePrint.previewUrl = result.previewDataUrl
+    imagePrint.uploadBlob = result.uploadBlob
+    imagePrint.uploadName = result.uploadName
+    imagePrint.widthMm = state.doc.width_mm
+    imagePrint.heightMm = state.doc.height_mm
+    imagePrint.offsetMm = Number(state.doc.offset_x_mm) || 0
+    imagePrint.fullWidthPx = result.fullW
+    imagePrint.labelWidthPx = result.labelW
+    imagePrint.labelHeightPx = result.labelH
+    imagePrint.open = true
+    imagePrint.printing = false
+    return true
+  } catch (error) {
+    showToast(`图片处理失败：${error.message || error}`, 'error', 6500)
+    return false
+  } finally {
+    imagePrint.processing = false
+  }
+}
+
+export function closeImagePrint() {
+  state.imagePrint.open = false
+  state.imagePrint.error = ''
+}
+
+/** POST /api/print/image — 上传处理好的 PNG 打印；成功后关闭确认弹窗 */
+export async function printCurrentImage() {
+  const imagePrint = state.imagePrint
+  if (!imagePrint.uploadBlob || imagePrint.printing) return
+  if (!ensurePrinterSelected()) return
+  imagePrint.printing = true
+  imagePrint.error = ''
+  try {
+    const result = await api.printImage(imagePrint.uploadBlob, {
+      width_mm: state.doc.width_mm,
+      height_mm: state.doc.height_mm,
+      offset_x_mm: state.doc.offset_x_mm,
+      copies: Math.max(1, Math.min(99, Number(state.copies) || 1)),
+      density: state.doc.density,
+      align: state.doc.align,
+      addr: state.printer.addr,
+    })
+    if (!result || result.ok === false) {
+      throw new Error(
+        firstString(
+          result?.error,
+          Array.isArray(result?.errors) ? result.errors.join('、') : '',
+          result?.message,
+        ) || '图片打印失败',
+      )
+    }
+    showToast(
+      `图片打印任务已发送${result.status ? `：${result.status}` : ''}`,
+      'success',
+      4000,
+    )
+    closeImagePrint()
+    window.setTimeout(() => refreshStatus(), 1500)
+  } catch (error) {
+    imagePrint.error = error.message || String(error)
+    showToast(`图片打印失败：${imagePrint.error}`, 'error', 7000)
+    markBackendOffline(error)
+  } finally {
+    imagePrint.printing = false
+  }
 }
 
 /* ------------------------------------------------------------------- print */

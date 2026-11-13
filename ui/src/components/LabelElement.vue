@@ -4,6 +4,7 @@ import { DOT_PER_MM, FONT_STACK } from '../units'
 import {
   SYMBOLOGIES,
   itemBoxMm,
+  itemOutsidePrintable,
   itemOverflow,
   textLayout,
 } from '../label'
@@ -25,6 +26,7 @@ function mmPx(mm) {
 
 const box = computed(() => itemBoxMm(props.item, props.doc))
 const overflow = computed(() => itemOverflow(props.item, props.doc))
+const printZoneCheck = computed(() => itemOutsidePrintable(props.item, props.doc))
 
 const rootStyle = computed(() => ({
   left: `${mmPx(props.item.x_mm)}px`,
@@ -177,7 +179,14 @@ const qrModules = computed(() => {
 <template>
   <div
     class="label-element"
-    :class="[`label-element--${item.type}`, { 'is-selected': selected, 'is-inverted': item.invert }]"
+    :class="[
+      `label-element--${item.type}`,
+      {
+        'is-selected': selected,
+        'is-inverted': item.invert,
+        'is-outside-printable': printZoneCheck.outside,
+      },
+    ]"
     :style="rootStyle"
     :title="overflowWarning || elementTitle"
     @pointerdown="$emit('pointerdown', $event)"

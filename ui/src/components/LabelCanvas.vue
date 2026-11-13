@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import LabelElement from './LabelElement.vue'
-import { itemBoxMm } from '../label'
+import { itemBoxMm, printableZoneMm } from '../label'
 import { DOT_PER_MM, clamp, round1 } from '../units'
 import { clearSelection, selectItem, state } from '../stores/store'
 
@@ -21,6 +21,15 @@ const absOffsetY = computed(() => Math.abs(offsetY.value))
 const trimMm = computed(() => Number(doc.value.trim_bottom_mm) || 0)
 const trimPx = computed(() => trimMm.value * DOT_PER_MM * zoom.value)
 const printHeightMm = computed(() => Math.max(0, round1(doc.value.height_mm - trimMm.value)))
+
+/** 硬件可打印区域（实测）：顶部 4mm、底部 1mm 不可打印（仅标注，不限制拖拽） */
+const printZone = computed(() => printableZoneMm(doc.value))
+const topBandPx = computed(() => printZone.value.topMm * DOT_PER_MM * zoom.value)
+const bottomBandPx = computed(
+  () => Math.max(0, doc.value.height_mm - printZone.value.bottomMm) * DOT_PER_MM * zoom.value,
+)
+const printableTopPx = computed(() => printZone.value.topMm * DOT_PER_MM * zoom.value)
+const printableHeightPx = computed(() => printZone.value.heightMm * DOT_PER_MM * zoom.value)
 const totalMm = computed(() => round1(doc.value.width_mm + offsetMm.value))
 const labelDotW = computed(() => doc.value.width_mm * DOT_PER_MM)
 const totalDotW = computed(() => (doc.value.width_mm + offsetMm.value) * DOT_PER_MM)
@@ -231,6 +240,31 @@ onBeforeUnmount(() => {
             >
               <div class="sheet-grid" :style="gridStyle"></div>
 
+              <!-- 硬件不可打印区（浅红斜纹）与可打印区域细线框（软提示，不限制拖拽） -->
+              <div
+                class="no-print-band no-print-band--top"
+                :style="{ height: `${topBandPx}px` }"
+                title="硬件不可打印：标签顶部 4mm（打印起点距顶部 4mm）"
+              >
+                <span class="no-print-band-tag">硬件不可打印（顶部 4mm）</span>
+              </div>
+              <div
+                class="no-print-band no-print-band--bottom"
+                :style="{ height: `${bottomBandPx}px` }"
+                title="硬件不可打印：标签底部 1mm"
+              >
+                <span v-if="bottomBandPx >= 12" class="no-print-band-tag no-print-band-tag--bottom">
+                  硬件不可打印（底部 1mm）
+                </span>
+              </div>
+              <div
+                class="printable-zone"
+                :style="{ top: `${printableTopPx}px`, height: `${printableHeightPx}px` }"
+                :title="`可打印区域：y ${printZone.topMm}–${printZone.bottomMm} mm（${printZone.heightMm} mm）`"
+              >
+                <span class="printable-zone-tag">可打印区域 {{ printZone.heightMm }}mm</span>
+              </div>
+
               <LabelElement
                 v-for="(item, index) in doc.items"
                 :key="item.id"
@@ -287,6 +321,7 @@ onBeforeUnmount(() => {
             打印头坐标 0–{{ totalMm }} mm
             <span v-if="offsetY !== 0">· 垂直微调 {{ offsetY }} mm</span>
             <span v-if="trimMm > 0">· 底部少走 {{ trimMm }} mm（不打印）</span>
+            <span>· 可打印区 {{ printZone.topMm }}–{{ printZone.bottomMm }} mm（{{ printZone.heightMm }} mm）</span>
           </div>
         </div>
       </div>

@@ -7,14 +7,18 @@ import {
   newDoc,
   openJsonFile,
   openPreview,
+  openPrinterDialog,
   printLabel,
+  processImageFile,
   saveJson,
   setPreset,
+  showToast,
   state,
   updateDoc,
 } from '../stores/store'
 
 const fileInput = ref(null)
+const imageInput = ref(null)
 const alignChoice = ref('')
 
 const presetValue = computed({
@@ -46,6 +50,21 @@ function onAlignChange(event) {
   const mode = event.target.value
   alignChoice.value = ''
   if (mode) alignSelected(mode)
+}
+
+function triggerImageImport() {
+  if (!state.printer.addr) {
+    showToast('请先选择打印机', 'warn', 4500)
+    openPrinterDialog()
+    return
+  }
+  imageInput.value?.click()
+}
+
+async function onImageChange(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (file) await processImageFile(file)
 }
 
 function onCopiesChange(event) {
@@ -82,11 +101,11 @@ function onTrimChange(event) {
       </button>
       <button class="tool-btn" title="打开本地 spec JSON" @click="triggerOpen">
         <AppIcon name="open" :size="15" />
-        <span>打开 JSON</span>
+        <span>打开</span>
       </button>
       <button class="tool-btn" title="导出 spec JSON（Ctrl+S）" @click="saveJson()">
         <AppIcon name="save" :size="15" />
-        <span>保存 JSON</span>
+        <span>保存</span>
       </button>
       <input
         ref="fileInput"
@@ -101,7 +120,10 @@ function onTrimChange(event) {
 
     <label class="toolbar-field">
       <span>标签</span>
-      <select v-model="presetValue" title="标签尺寸预设">
+      <select
+        v-model="presetValue"
+        title="标签尺寸预设 · 硬件打印起点距标签顶部 4mm（可打印区 4–29mm / 40×30）"
+      >
         <option v-for="preset in LABEL_PRESETS" :key="preset.id" :value="preset.id">
           {{ preset.label }}
         </option>
@@ -198,6 +220,22 @@ function onTrimChange(event) {
     </label>
 
     <div class="toolbar-actions">
+      <button
+        class="btn btn-ghost"
+        :disabled="state.imagePrint.processing"
+        title="导入图片 / SVG 打印（按当前标签尺寸缩放，含纸卷偏移）"
+        @click="triggerImageImport()"
+      >
+        <AppIcon name="image" :size="16" />
+        <span>{{ state.imagePrint.processing ? '处理中…' : '导入图片' }}</span>
+      </button>
+      <input
+        ref="imageInput"
+        class="visually-hidden"
+        type="file"
+        accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml"
+        @change="onImageChange"
+      />
       <button class="btn btn-ghost" title="调用后端生成 PNG 预览" @click="openPreview()">
         <AppIcon name="preview" :size="16" />
         <span>预览</span>

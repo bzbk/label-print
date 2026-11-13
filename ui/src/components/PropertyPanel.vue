@@ -1,7 +1,15 @@
 <script setup>
 import { computed } from 'vue'
 import AppIcon from './AppIcon.vue'
-import { DENSITIES, LABEL_PRESETS, SYMBOLOGIES, TYPE_LABELS, itemBoxMm } from '../label'
+import {
+  DENSITIES,
+  LABEL_PRESETS,
+  SYMBOLOGIES,
+  TYPE_LABELS,
+  itemBoxMm,
+  itemOutsidePrintable,
+  printableZoneMm,
+} from '../label'
 import {
   copySpecJson,
   duplicateItem,
@@ -34,6 +42,11 @@ const geometryWarning = computed(() =>
   bitmapMm.value > 50
     ? `标签宽 ${state.doc.width_mm} + 纸卷偏移 ${offsetMm.value} = ${bitmapMm.value} mm（${bitmapDotW.value} dot），超过 400px 位图上限，打印可能被拒绝或右缘缺字。`
     : '',
+)
+
+const printZone = computed(() => printableZoneMm(state.doc))
+const itemOutsidePrintZone = computed(() =>
+  item.value ? itemOutsidePrintable(item.value, state.doc).outside : false,
 )
 
 const trimMm = computed(() => Number(state.doc.trim_bottom_mm) || 0)
@@ -123,6 +136,10 @@ function onPresetChange(event) {
         {{ Math.round(box.h_mm * 8) }} dot）· 打印头坐标 X =
         {{ fmt(offsetMm + item.x_mm) }} mm
       </p>
+      <p v-if="itemOutsidePrintZone" class="readout readout--warn">
+        超出可打印区域，打印会被裁切（可打印区 {{ printZone.topMm }}–{{ printZone.bottomMm }} mm；当前
+        y={{ item.y_mm }} mm，底边 {{ fmt(item.y_mm + box.h_mm) }} mm）。仍可保存/打印，仅作提醒。
+      </p>
 
       <!-- 文本 -->
       <template v-if="item.type === 'text'">
@@ -196,7 +213,9 @@ function onPresetChange(event) {
           <input type="checkbox" :checked="item.show_text" @change="patchItem({ show_text: $event.target.checked })" />
           <span>显示人眼可读文字</span>
         </label>
-        <p class="readout">示意宽约 {{ box.w_mm }} mm；真实条码宽度与编码由后端 zint 生成。</p>
+        <p class="readout">
+          示意宽约 {{ box.w_mm }} mm。实际条码由服务端生成，宽度以预览为准。
+        </p>
       </template>
 
       <!-- 二维码 -->
@@ -261,6 +280,10 @@ function onPresetChange(event) {
           />
         </label>
       </div>
+      <p class="readout readout--note">
+        硬件打印起点距顶部 {{ printZone.topMm }} mm；可打印区
+        {{ printZone.topMm }}–{{ printZone.bottomMm }} mm（{{ printZone.heightMm }} mm）。超出区域仅软提示，仍可保存/打印。
+      </p>
       <label class="field field--stack">
         尺寸预设
         <select :value="presetId" @change="onPresetChange">

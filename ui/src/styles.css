@@ -159,8 +159,8 @@ button {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px 6px;
-  padding: 8px 14px;
+  gap: 5px 5px;
+  padding: 8px 13px;
   background: linear-gradient(180deg, var(--toolbar-from) 0%, var(--toolbar-to) 100%);
   color: #e8ecf4;
   border-bottom: 1px solid #10151f;
@@ -270,7 +270,7 @@ button {
 }
 
 .toolbar-num {
-  width: 48px;
+  width: 46px;
   text-align: center;
 }
 
@@ -281,7 +281,7 @@ button {
 
 .toolbar-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   margin-left: auto;
 }
 
@@ -630,6 +630,85 @@ kbd {
   font-size: 10px;
   letter-spacing: 0.12em;
   writing-mode: vertical-rl;
+}
+
+/* 可打印区域标注（软提示）：顶部 4mm / 底部 1mm 浅红斜纹 + 中间细实线框 */
+.no-print-band {
+  position: absolute;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  pointer-events: none;
+  background-color: rgba(220, 38, 38, 0.018);
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(220, 38, 38, 0.095) 0 6px,
+    transparent 6px 12px
+  );
+}
+
+.no-print-band--top {
+  top: 0;
+  border-bottom: 1px dashed rgba(220, 38, 38, 0.32);
+}
+
+.no-print-band--bottom {
+  bottom: 0;
+  border-top: 1px dashed rgba(220, 38, 38, 0.32);
+}
+
+.no-print-band-tag {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.72);
+  color: rgba(185, 28, 28, 0.85);
+  font-size: 9.5px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.no-print-band-tag--bottom {
+  top: auto;
+  bottom: 0;
+  left: 4px;
+  right: auto;
+  font-size: 8.5px;
+  line-height: 1.6;
+}
+
+.printable-zone {
+  position: absolute;
+  right: 0;
+  left: 0;
+  z-index: 4;
+  border: 1px solid rgba(37, 99, 235, 0.42);
+  pointer-events: none;
+}
+
+.printable-zone-tag {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.78);
+  color: rgba(29, 78, 216, 0.9);
+  font-size: 9.5px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+/* 超出可打印区域的元素：黄色边框软提醒（不阻止拖拽/保存/打印） */
+.label-element.is-outside-printable {
+  outline: 2px dashed rgba(234, 179, 8, 0.95);
+}
+
+.label-element.is-outside-printable.is-selected {
+  outline: 2px solid #eab308;
+  box-shadow: 0 0 0 4px rgba(234, 179, 8, 0.18);
 }
 
 /* 底部少走（trim）区域：打印时不下发，仅作视觉提示 */
@@ -1122,6 +1201,14 @@ kbd {
   font-size: 10.5px;
   line-height: 1.55;
   color: var(--ink-3);
+}
+
+.readout--note {
+  color: #1e40af;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 5px 7px;
 }
 
 .readout--warn {
@@ -1696,6 +1783,64 @@ kbd {
 .printer-empty-hint {
   font-size: 11px;
   color: #a2abbb;
+}
+
+/* 导入图片 / SVG 打印确认弹窗 */
+
+.image-print-modal {
+  width: min(700px, 94vw);
+}
+
+.image-print-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-height: 64vh;
+  padding: 16px 18px;
+  overflow: auto;
+  background: #f6f7fa;
+}
+
+.image-print-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  width: 100%;
+}
+
+.image-print-figure .preview-img {
+  max-height: 42vh;
+}
+
+.image-print-figure figcaption {
+  font-size: 11px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+.image-print-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  width: 100%;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.image-print-meta strong {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.image-print-note {
+  width: 100%;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--ink-3);
 }
 
 /* 打印机设置（写入设备 207/208） */

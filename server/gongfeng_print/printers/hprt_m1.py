@@ -49,6 +49,18 @@ CMD_ALIGN = {
 CMD_DENSITY = bytes([GS]) + b"setc"                  # + d
 CMD_PAPER_TYPE = bytes([GS]) + b"setp"               # + t
 CMD_LEARN = bytes([GS]) + b"setL"
+
+# 官方参数命令: 1B 1C "& V1 setkey\r\n" 01 <key LE16> <encode> <value>
+CMD_SETKEY = bytes([ESC, 0x1C]) + b"& V1 setkey\r\n" + b"\x01"
+
+
+def setkey_cmd(key: int, value: int, encode: int) -> bytes:
+    head = CMD_SETKEY + int(key).to_bytes(2, "little") + bytes([encode])
+    if encode == 1:
+        return head + bytes([value & 0xFF])
+    if encode == 2:
+        return head + (value & 0xFFFF).to_bytes(2, "little")
+    return head + (value & 0xFFFFFFFF).to_bytes(4, "little")
 CMD_START_PRINT = bytes([ESC, 0x1B, 0x01, 0x5A, 0x00])
 CMD_FEED_960 = bytes([GS, 0x66, 0xC0, 0x03])
 DENSITIES = (35, 55, 75, 95)
@@ -166,7 +178,8 @@ def build_stream(image: Image.Image, *, package_size: int = PACKAGE_SIZE,
                  density: int = 75, align: str = "left",
                  paper_type: int | None = 3,
                  form_feed: bool = False,
-                 flow: str = "vendor", trim_bottom_mm: float = 0.0) -> StreamInfo:
+                 flow: str = "vendor", trim_bottom_mm: float = 0.0,
+                 post_feed_mm: float = 0.0) -> StreamInfo:
     """把位图编码成一整套 ESC/POLI 指令流（含全部 GS v00 帧）。"""
     raw, wbytes, rows = image_to_raster(image)
     if trim_bottom_mm > 0:
@@ -204,6 +217,10 @@ def build_stream(image: Image.Image, *, package_size: int = PACKAGE_SIZE,
         if form_feed:
             parts.append(CMD_FEED_960)
     # 注意：固件把 1D 66 参数当无符号数，负值会导致狂走纸，禁止使用负数回退。
+    if post_feed_mm > 0:
+        # 正向补走：标签30mm + 缝隙2mm = 32mm 节距，打印30mm后再走2mm，下一张正好对齐
+        dots = int(round(float(post_feed_mm) * 8))
+        parts.append(bytes([GS, 0x66]) + dots.to_bytes(2, "little"))
     return StreamInfo(stream=b"".join(parts), row_bytes=wbytes, rows=rows,
                       frames=frames, package_size=int(package_size))
 
@@ -371,14 +388,20 @@ class HprtM1Backend(PrinterBackend):
     # -- 打印 -------------------------------------------------------
     def print_image(self, image: Image.Image, *, copies: int = 1,
                     density: int = 75, align: str = "left",
-                    auto_learn: bool = True, form_feed: bool = False,
-                    flow: str = "legacy", trim_bottom_mm: float = 2.0,
-                    wait: float = 0.4) -> PrinterStatus:
+                    auto_learn: bool = False, form_feed: bool = False,
+                    flow: str = "legacy", trim_bottom_mm: float = 0.0,
+                    post_feed_mm: float = 2.0, wait: float = 0.4) -> PrinterStatus:
         if image.width > self.capabilities.head_dots + 16:
             raise BackendError(
                 f"位图宽度 {image.width}px 超过 M1 允许的 "
                 f"{self.capabilities.head_dots + 16}px（标签宽度+纸卷偏移过大）")
         copies = max(1, min(int(copies or 1), 99))
+        # 官方纸张参数：206=2 标签纸；208=定位后走纸长度(-24 = -2mm，固件侧回退/补偿)
+        try:
+            self._write(setkey_cmd(206, 2, 1), gap=0.05)
+            self._write(setkey_cmd(208, -24, 2), gap=0.05)
+        except Exception:
+            pass
         started = time.time()
         pre = self.ensure_ready(auto_learn=auto_learn)
         # 握手成功但状态查询无回包（value<0）时不再阻断打印：
@@ -388,7 +411,8 @@ class HprtM1Backend(PrinterBackend):
         info: StreamInfo | None = None
         for _ in range(copies):
             info = build_stream(image, density=density, align=align,
-                                flow=flow, trim_bottom_mm=trim_bottom_mm, 
+                                flow=flow, trim_bottom_mm=trim_bottom_mm,
+                                post_feed_mm=post_feed_mm, 
                                 form_feed=form_feed)
             self._write(info.stream, gap=0)
             time.sleep(max(0.1, wait))

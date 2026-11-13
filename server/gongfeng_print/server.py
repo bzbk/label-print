@@ -504,10 +504,16 @@ class Api:
             raise ApiError(str(exc), 400) from None
 
         def do_print(backend: PrinterBackend):
-            return backend.print_image(
-                image, copies=spec.copies, density=spec.density,
-                align=spec.align, auto_learn=spec.auto_learn,
-                form_feed=spec.form_feed, trim_bottom_mm=spec.trim_bottom_mm)
+            # 多份拆成多个单张：每张独立下发一次 PRINT，间隔 0.8s，避免连续打印累积偏移
+            n = max(1, min(int(spec.copies or 1), 99))
+            st = None
+            for _ in range(n):
+                st = backend.print_image(
+                    image, copies=1, density=spec.density,
+                    align=spec.align, auto_learn=spec.auto_learn,
+                    form_feed=spec.form_feed, trim_bottom_mm=spec.trim_bottom_mm)
+                time.sleep(0.8)
+            return st
 
         try:
             backend, st = self._run_device("print", model_id, addr, do_print)

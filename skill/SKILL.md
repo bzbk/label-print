@@ -22,7 +22,7 @@ description: Use when printing labels on the GoFor/共风 label-print setup with
 | 分辨率 | 203 dpi（8 dot/mm），打印头 384 dot（约 48mm） |
 | 标签纸 | **40mm 宽 × 30mm 高**（默认），纸筒仓 50mm |
 | 纸卷偏移 | **挡板在左侧，40mm 纸需右移 10mm**（`offset_x_mm=10`）→ 渲染 400px 宽 |
-| 仓库 | `~/Desktop/label print/gongfeng-label`（GitHub: `bzbk/label-print`） |
+| 仓库 | `~/Desktop/label print/label-print`（GitHub: `bzbk/label-print`） |
 
 ## 2. 三层用法（任选其一）
 
@@ -45,7 +45,7 @@ description: Use when printing labels on the GoFor/共风 label-print setup with
 ### B. HTTP 服务
 
 ```bash
-cd "~/Desktop/label print/gongfeng-label/server"
+cd "~/Desktop/label print/label-print/server"
 python3 -m gongfeng_print.server --port 17600 &
 curl -s http://127.0.0.1:17600/api/status
 curl -s http://127.0.0.1:17600/api/models
@@ -56,7 +56,7 @@ curl -s -X POST http://127.0.0.1:17600/api/preview -H 'Content-Type: application
 ### C. CLI
 
 ```bash
-cd "~/Desktop/label print/gongfeng-label/server"
+cd "~/Desktop/label print/label-print/server"
 python3 -m gongfeng_print.cli --status              # 若提供
 ```
 

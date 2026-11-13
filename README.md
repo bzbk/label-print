@@ -5,6 +5,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+**仓库**：[GitHub · bzbk/label-print](https://github.com/bzbk/label-print) ｜ **镜像**：[gitea.gofor.ltd · bzbk007/label-print](https://gitea.gofor.ltd/bzbk007/label-print)
+
 ---
 
 ## 特性

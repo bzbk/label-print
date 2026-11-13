@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, watch } from 'vue'
 import { DOT_PER_MM, FONT_STACK } from '../units'
 import {
   SYMBOLOGIES,
@@ -9,6 +9,12 @@ import {
   textLayout,
 } from '../label'
 import AppIcon from './AppIcon.vue'
+import {
+  cancelScheduledRender,
+  elementRenderEntry,
+  getItemRender,
+  scheduleElementRender,
+} from '../elementRender'
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -26,6 +32,30 @@ function mmPx(mm) {
 
 const box = computed(() => itemBoxMm(props.item, props.doc))
 const overflow = computed(() => itemOverflow(props.item, props.doc))
+
+/* 条码 / 二维码：服务端真实渲染图（与打印同一渲染器） */
+const renderEntry = computed(() => elementRenderEntry(props.item))
+const rendered = computed(() => getItemRender(props.item))
+const renderReady = computed(() => rendered.value?.status === 'ready')
+
+watch(
+  renderEntry,
+  (entry, oldEntry) => {
+    if (!entry) return
+    const cached = getItemRender(props.item)
+    if (cached?.status === 'ready' || cached?.status === 'loading') return
+    // 首次挂载立即请求；参数变化（输入/宽度/高度/符号/show_text）防抖 300ms
+    scheduleElementRender(entry, {
+      delay: oldEntry === undefined ? 0 : 300,
+      channel: props.item.id,
+    })
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  cancelScheduledRender(renderEntry.value, props.item.id)
+})
 const printZoneCheck = computed(() => itemOutsidePrintable(props.item, props.doc))
 
 const rootStyle = computed(() => ({
@@ -126,8 +156,8 @@ const tagStyle = computed(() => ({
 }))
 
 const elementTitle = computed(() => {
-  if (props.item.type === 'barcode') return `${symbologyLabel.value} 示意 · ${props.item.data}`
-  if (props.item.type === 'qr') return `二维码 示意 · ${props.item.data}`
+  if (props.item.type === 'barcode') return `${symbologyLabel.value} · ${props.item.data}`
+  if (props.item.type === 'qr') return `二维码 · ${props.item.data}`
   if (props.item.type === 'text') return props.item.text
   return ''
 })
@@ -198,32 +228,47 @@ const qrModules = computed(() => {
       </div>
     </div>
 
-    <!-- 条码：SVG 示意占位（非可扫描编码，真实条码由后端 zint 生成） -->
+    <!-- 条码：服务端 zint 实时渲染；加载中/离线失败回退示意占位 -->
     <div v-else-if="item.type === 'barcode'" class="barcode-box">
-      <span class="element-tag" :style="tagStyle">{{ symbologyLabel }}</span>
-      <svg
-        class="barcode-bars"
-        :style="barsStyle"
-        viewBox="0 0 1000 100"
-        preserveAspectRatio="none"
-        aria-hidden="true"
-      >
-        <rect
-          v-for="(bar, barIndex) in barcodeBars"
-          :key="barIndex"
-          :x="bar.x"
-          y="0"
-          :width="bar.width"
-          height="100"
-          fill="#111111"
-        />
-      </svg>
-      <div v-if="item.show_text" class="barcode-caption" :style="captionStyle">
-        {{ item.data }}
-      </div>
-      <div v-else class="element-meta" :style="metaStyle">
-        示意 · {{ symbologyLabel }} · {{ item.data }}
-      </div>
+      <img
+        v-if="renderReady"
+        class="element-render-img"
+        :src="rendered.url"
+        alt=""
+        draggable="false"
+      />
+      <template v-else>
+        <span class="element-tag" :style="tagStyle">{{ symbologyLabel }}</span>
+        <svg
+          class="barcode-bars"
+          :style="barsStyle"
+          viewBox="0 0 1000 100"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <rect
+            v-for="(bar, barIndex) in barcodeBars"
+            :key="barIndex"
+            :x="bar.x"
+            y="0"
+            :width="bar.width"
+            height="100"
+            fill="#111111"
+          />
+        </svg>
+        <div v-if="item.show_text" class="barcode-caption" :style="captionStyle">
+          {{ item.data }}
+        </div>
+        <div v-else class="element-meta" :style="metaStyle">
+          示意 · {{ symbologyLabel }} · {{ item.data }}
+        </div>
+      </template>
+      <span
+        v-if="selected"
+        class="element-resize-handle element-resize-handle--right"
+        title="拖动调整条码宽度"
+        @pointerdown.stop.prevent="$emit('resize-start', $event, item)"
+      ></span>
     </div>
 
     <!-- 图片元素：dataURL 直接渲染，随 spec 发给服务端按 mm 缩放 -->
@@ -235,22 +280,37 @@ const qrModules = computed(() => {
       draggable="false"
     />
 
-    <!-- 二维码：SVG 示意占位（非可扫描编码，真实二维码由后端 zint 生成） -->
+    <!-- 二维码：服务端 zint 实时渲染；加载中/离线失败回退示意占位 -->
     <div v-else-if="item.type === 'qr'" class="qr-box">
-      <span class="element-tag" :style="tagStyle">QR</span>
-      <svg class="qr-svg" viewBox="-2 -2 25 25" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-        <rect x="-2" y="-2" width="25" height="25" fill="#ffffff" />
-        <rect
-          v-for="module in qrModules"
-          :key="module.key"
-          :x="module.x"
-          :y="module.y"
-          width="1"
-          height="1"
-          fill="#111111"
-        />
-      </svg>
-      <div class="element-meta" :style="metaStyle">示意 · {{ item.data }}</div>
+      <img
+        v-if="renderReady"
+        class="element-render-img"
+        :src="rendered.url"
+        alt=""
+        draggable="false"
+      />
+      <template v-else>
+        <span class="element-tag" :style="tagStyle">QR</span>
+        <svg class="qr-svg" viewBox="-2 -2 25 25" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+          <rect x="-2" y="-2" width="25" height="25" fill="#ffffff" />
+          <rect
+            v-for="module in qrModules"
+            :key="module.key"
+            :x="module.x"
+            :y="module.y"
+            width="1"
+            height="1"
+            fill="#111111"
+          />
+        </svg>
+        <div class="element-meta" :style="metaStyle">示意 · {{ item.data }}</div>
+      </template>
+      <span
+        v-if="selected"
+        class="element-resize-handle element-resize-handle--corner"
+        title="拖动调整二维码尺寸"
+        @pointerdown.stop.prevent="$emit('resize-start', $event, item)"
+      ></span>
     </div>
 
     <span v-if="overflowWarning" class="element-warn" aria-hidden="true">

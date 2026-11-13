@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import LabelElement from './LabelElement.vue'
-import { itemBoxMm, printableZoneMm } from '../label'
+import { LIMITS, itemBoxMm, printableZoneMm } from '../label'
 import { DOT_PER_MM, clamp, round1 } from '../units'
 import { clearSelection, markHistory, selectItem, state } from '../stores/store'
 
@@ -11,6 +11,7 @@ const zoom = computed(() => state.zoom)
 
 const scrollEl = ref(null)
 const dragState = ref(null)
+const resizeState = ref(null)
 let resizeTimer = null
 
 /** 多选整体包围盒（仅显示，不参与拖拽命中） */
@@ -225,6 +226,52 @@ function stopDrag() {
   dragState.value = null
 }
 
+/* 条码拖右边缘改宽度 / 二维码拖右下角改尺寸（实时更新 mm，防抖重新请求服务端渲染） */
+function onResizeStart(event, item) {
+  if (event.button !== 0) return
+  event.preventDefault()
+  event.stopPropagation()
+  selectItem(item.id)
+  resizeState.value = {
+    id: item.id,
+    startClientX: event.clientX,
+    startWidth: Number(item.width_mm) || 20,
+    startSize: Number(item.size_mm) || 14,
+    sessionId: Date.now(),
+    moved: false,
+  }
+  window.addEventListener('pointermove', onResizeMove)
+  window.addEventListener('pointerup', stopResize, { once: true })
+  window.addEventListener('pointercancel', stopResize, { once: true })
+}
+
+function onResizeMove(event) {
+  const resize = resizeState.value
+  if (!resize) return
+  const item = state.doc.items.find((entry) => entry.id === resize.id)
+  if (!item) return
+  const deltaMm = (event.clientX - resize.startClientX) / (DOT_PER_MM * state.zoom)
+  const step = event.shiftKey ? 0.5 : 1
+  if (item.type === 'barcode') {
+    const next = Math.round((resize.startWidth + deltaMm) / step) * step
+    item.width_mm = clamp(next, LIMITS.barcodeWidth[0], LIMITS.barcodeWidth[1])
+  } else if (item.type === 'qr') {
+    const next = Math.round((resize.startSize + deltaMm) / step) * step
+    item.size_mm = clamp(next, LIMITS.qrSize[0], LIMITS.qrSize[1])
+  }
+  if (!resize.moved) {
+    resize.moved = true
+    markHistory(`resize:${resize.sessionId}`)
+  }
+}
+
+function stopResize() {
+  window.removeEventListener('pointermove', onResizeMove)
+  window.removeEventListener('pointerup', stopResize)
+  window.removeEventListener('pointercancel', stopResize)
+  resizeState.value = null
+}
+
 function onSheetPointerDown(event) {
   if (event.button !== 0) return
   // 元素内部会 stopPropagation，这里只会收到画布空白 / 偏移留白区域的点击
@@ -248,6 +295,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
   window.clearTimeout(resizeTimer)
   stopDrag()
+  stopResize()
 })
 </script>
 
@@ -343,6 +391,7 @@ onBeforeUnmount(() => {
                 :index="index"
                 :selected="state.selectedIds.includes(item.id)"
                 @pointerdown="onItemPointerDown($event, item)"
+                @resize-start="onResizeStart"
               />
 
               <!-- 垂直微调：只在可能被裁切的一侧画一条虚线提示，不改变网格/元素坐标 -->

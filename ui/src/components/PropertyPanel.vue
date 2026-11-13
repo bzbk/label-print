@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import AppIcon from './AppIcon.vue'
+import { getItemRender } from '../elementRender'
 import {
   DENSITIES,
   LABEL_PRESETS,
@@ -46,6 +47,11 @@ const geometryWarning = computed(() =>
     ? `标签宽 ${state.doc.width_mm} + 纸卷偏移 ${offsetMm.value} = ${bitmapMm.value} mm（${bitmapDotW.value} dot），超过 400px 位图上限，打印可能被拒绝或右缘缺字。`
     : '',
 )
+
+const barcodeRender = computed(() =>
+  item.value?.type === 'barcode' ? getItemRender(item.value) : null,
+)
+const qrRender = computed(() => (item.value?.type === 'qr' ? getItemRender(item.value) : null))
 
 const printZone = computed(() => printableZoneMm(state.doc))
 const itemOutsidePrintZone = computed(() =>
@@ -254,24 +260,45 @@ function onPresetChange(event) {
             </option>
           </select>
         </label>
-        <label class="field field--stack">
-          条码高度（mm）
-          <input
-            type="number"
-            min="4"
-            max="40"
-            step="0.5"
-            :value="item.height_mm"
-            @change="patchItem({ height_mm: numberValue($event, item.height_mm) })"
-          />
-        </label>
+        <div class="field-grid">
+          <label class="field">
+            宽度（mm）
+            <input
+              type="number"
+              min="5"
+              max="72"
+              step="0.5"
+              :value="item.width_mm"
+              @change="patchItem({ width_mm: numberValue($event, item.width_mm) })"
+            />
+          </label>
+          <label class="field">
+            高度（mm）
+            <input
+              type="number"
+              min="4"
+              max="40"
+              step="0.5"
+              :value="item.height_mm"
+              @change="patchItem({ height_mm: numberValue($event, item.height_mm) })"
+            />
+          </label>
+        </div>
         <label class="check-row">
           <input type="checkbox" :checked="item.show_text" @change="patchItem({ show_text: $event.target.checked })" />
           <span>显示人眼可读文字</span>
         </label>
-        <p class="readout">
-          示意宽约 {{ box.w_mm }} mm。实际条码由服务端生成，宽度以预览为准。
+        <p v-if="barcodeRender?.status === 'ready'" class="readout">
+          实际宽度 {{ fmt(barcodeRender.widthPx / 8) }} mm（服务端渲染，位图
+          {{ barcodeRender.widthPx }} × {{ barcodeRender.heightPx }} px · 203dpi）
         </p>
+        <p v-else-if="barcodeRender?.status === 'loading'" class="readout">
+          正在请求服务端渲染…
+        </p>
+        <p v-else-if="barcodeRender?.status === 'error'" class="readout readout--warn">
+          服务端渲染失败，画布显示示意占位（请检查后端是否启动）。
+        </p>
+        <p v-else class="readout">按宽度 {{ box.w_mm }} mm 请求服务端渲染…</p>
       </template>
 
       <!-- 图片 -->
@@ -355,7 +382,15 @@ function onPresetChange(event) {
             @change="patchItem({ size_mm: numberValue($event, item.size_mm) })"
           />
         </label>
-        <p class="readout">二维码为正方形；真实编码由后端 zint 生成。</p>
+        <p v-if="qrRender?.status === 'ready'" class="readout">
+          实际尺寸 {{ fmt(qrRender.widthPx / 8) }} × {{ fmt(qrRender.heightPx / 8) }} mm（服务端渲染，位图
+          {{ qrRender.widthPx }} × {{ qrRender.heightPx }} px · 203dpi）
+        </p>
+        <p v-else-if="qrRender?.status === 'loading'" class="readout">正在请求服务端渲染…</p>
+        <p v-else-if="qrRender?.status === 'error'" class="readout readout--warn">
+          服务端渲染失败，画布显示示意占位（请检查后端是否启动）。
+        </p>
+        <p v-else class="readout">二维码为正方形；按尺寸 {{ box.w_mm }} mm 请求服务端渲染…</p>
       </template>
     </section>
 

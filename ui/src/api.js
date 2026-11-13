@@ -167,6 +167,21 @@ export async function fetchPreview(spec) {
   throw new ApiError('预览接口返回了无法识别的数据（期望 PNG 二进制，或含 image/base64 字段的 JSON）')
 }
 
+/** POST /api/element/render — 服务端实时渲染单个条码/二维码 PNG（与打印同一渲染器） */
+export async function renderElementImage(payload) {
+  const { response, blob } = await request('/api/element/render', {
+    method: 'POST',
+    body: payload,
+    responseType: 'blob',
+    timeout: 9000,
+  })
+  const contentType = (response.headers.get('content-type') || '').toLowerCase()
+  if (!contentType.startsWith('image/') && !blob.type.startsWith('image/')) {
+    throw new ApiError('元素渲染接口未返回图片')
+  }
+  return blob
+}
+
 /** POST /api/print — 打印。body = spec + copies（copies 为前端扩展字段） */
 export function printLabel(spec) {
   return request('/api/print', { method: 'POST', body: spec, timeout: 25000 })
@@ -197,6 +212,7 @@ export const api = {
   scanDevices,
   connectDevice,
   fetchPreview,
+  renderElementImage,
   printLabel,
   learnPaper,
   writePrinterParams,

@@ -10,6 +10,7 @@
 - 中：打印头坐标 mm 标尺 + 1mm 网格；**左侧灰斜纹 = 纸卷偏移留白（10mm），红色虚线 = 打印头原点 x=0**；顶部/底部浅红斜纹标出硬件不可打印区，中间细线框出可打印区域
 - 右：所选元素 / 标签属性（含纸卷偏移说明）+ 实时 spec JSON
 - 顶：品牌、新建、打开/保存 JSON、标签预设、**纸卷偏移 / 垂直微调 / 底部少走**、份数、浓度、对齐、预览、打印
+- 条码/二维码：**服务端 zint 实时渲染**（与打印同一渲染器），画布即真实位图、按 px/8 换算 mm，所见即所得；拖右边缘/右下角改尺寸；离线自动回退示意占位
 - 编辑：**撤销/重做（80 步）**、Shift 多选 / Ctrl+A 全选、以可打印区为基准的**对齐 / 等距分布**、图层上移/下移/置顶/置底、Ctrl+C/V 复制粘贴
 - 批量：**批量打印**（CSV / 粘贴表格 + 文本 `{{列名}}` 占位逐行打印）、**我的模板**（localStorage 保存 / 一键新建）
 - 打印机：状态栏入口 → **扫描蓝牙 / 选择 / 连接**，并支持**写入设备参数（207/208）**；记住上次选择与参数（localStorage），预览/打印请求自动带 `addr`
@@ -26,6 +27,10 @@ Shift / Ctrl 点击可多选，画布显示整体包围盒；右侧「多选」�
 批量打印：导入 CSV 或粘贴表格，第一行表头，文本元素 `{{列名}}` 逐行替换，显示进度与失败行（每行一次 `/api/print`，`copies=1`，间隔 1s）：
 
 ![批量打印](./docs/batch-print.png)
+
+画布中的条码/二维码为服务端 zint 实时渲染（与打印同一渲染器），属性面板显示实际宽度，拖右边缘/右下角可改尺寸：
+
+![真实条码/二维码渲染](./docs/barcode-render.png)
 
 「我的模板」保存在 localStorage，可一键新建：
 
@@ -81,7 +86,7 @@ ui/
 ├── index.html            # 入口 HTML（中文 lang、原创 favicon）
 ├── package.json          # name: gofor-label-print，仅 vue + vite + @vitejs/plugin-vue
 ├── vite.config.js
-├── docs/                 # 自测截图（editor / multi-select / batch-print / templates / printer-dialog / …）
+├── docs/                 # 自测截图（editor / barcode-render / multi-select / batch-print / templates / …）
 ├── README.md
 └── src/
     ├── main.js
@@ -90,12 +95,13 @@ ui/
     ├── units.js          # mm↔dot、文字测量、按 mm 折行
     ├── label.js          # 文档模型、纸卷/垂直偏移、可打印区、元素尺寸、spec 序列化
     ├── imageElement.js   # 图片元素：SVG 栅格化、大图压缩、dataURL 生成
+    ├── elementRender.js  # 条码/二维码服务端实时渲染缓存（防抖/降级/位图尺寸）
     ├── styles.css        # 全部样式（深色工具条 + 浅色工作区）
     ├── components/
     │   ├── AppToolbar.vue      # 顶部工具条（含纸卷 / 垂直偏移输入）
     │   ├── ElementPalette.vue  # 左侧元素库/模板
     │   ├── LabelCanvas.vue     # 画布、打印头原点/偏移留白、mm 标尺、拖拽/缩放
-    │   ├── LabelElement.vue    # 文本（逐行渲染）、条码/二维码 SVG 示意
+    │   ├── LabelElement.vue    # 文本、条码/二维码（服务端 PNG）、图片元素
     │   ├── PropertyPanel.vue   # 右侧属性面板 + spec JSON
     │   ├── StatusBar.vue       # 打印机状态栏
     │   ├── PrinterDialog.vue   # 打印机扫描 / 选择 / 连接 / 设置弹窗
@@ -189,8 +195,8 @@ M1 的**纸筒挡板在左侧、纸筒仓宽 50mm**：装入 40mm 卷纸后，�
 | 标尺/网格 | 上方/左侧 mm 刻度（打印头坐标），1mm 网格；拖拽吸附 1mm，`Shift` 精细到 0.1mm |
 | 元素边框 | 所有元素常显淡虚线边框，选中为 2px 实线，超出标签范围出现红色叹号 |
 | 文字 | `size` 是 **dot 字号**（28 ≈ 3.5mm 高）；按「标签右边界 − x」的可用宽度**逐行折行**（中文按字、西文按词、超长串按字符硬切），逐行绝对定位渲染，行高 1.25×字号，超出标签高度的行被裁切并告警 |
-| 条码 | 画布中的条纹是**纯示意占位（不可扫描）**，真实条码由后端 zint 生成；高度 `height_mm` 精确，宽度为估算值，最终以「预览 PNG」为准 |
-| 二维码 | 同样为示意占位，边长严格等于 `size_mm`，角标标注类型，底部标注「示意 · 数据」 |
+| 条码 | 画布显示 `/api/element/render` 返回的真实 zint PNG；元素尺寸 = 位图 px / 8（如 224px → 28mm）；请求宽度 `width_mm`，实际宽度受模块整数取整，属性面板显示「实际宽度」（与打印同一渲染器） |
+| 二维码 | 同样显示服务端 PNG；元素尺寸 = 位图 px / 8（如 96px → 12mm），`size_mm` 为请求值，模块取整后可能略有差异 |
 
 ---
 
@@ -211,6 +217,7 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 | `GET` | `/api/scan?seconds=8` | 主动扫描蓝牙设备 | 「扫描蓝牙设备」按钮；扫描中禁用并显示 loading |
 | `POST` | `/api/connect` | 连接指定地址并握手（body `{"addr":...}`） | 设备行「连接」；成功显示型号/状态，失败展示后端 error 原文 |
 | `POST` | `/api/printer/params` | 写入设备参数 207/208（body `{addr, start_pos_mm?, feed_after_pos_mm?}`） | 弹窗「打印机设置」；显示 `written`/error，参数写入 localStorage |
+| `POST` | `/api/element/render` | 渲染单个条码/二维码（body `{type, symbology, data, width_mm, height_mm, show_text, size_mm}`），返回 PNG | 画布元素实时图；防抖 300ms、blob URL 缓存、失败回退示意占位 |
 | `POST` | `/api/preview` | 传 spec（含 `addr`），返回 PNG | 兼容 `image/png` 与 JSON base64；弹窗显示，可保存 PNG |
 | `POST` | `/api/print` | 传 spec + `addr` + `copies`，真正打印 | 成功 toast，失败 toast + 状态栏离线提示 |
 | `POST` | `/api/learn` | 测纸 / 重新定位（会走纸！） | 状态栏「测纸」按钮（带当前 addr），成功/失败 toast |
@@ -248,7 +255,7 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
   "density": 75,
   "items": [
     { "type": "text", "text": "物料 A", "size": 28, "bold": true, "align": "left", "x_mm": 2, "y_mm": 2 },
-    { "type": "barcode", "data": "ABC123", "symbology": "code128", "height_mm": 12, "x_mm": 2, "y_mm": 15 },
+    { "type": "barcode", "data": "ABC123", "symbology": "code128", "width_mm": 22, "height_mm": 12, "x_mm": 2, "y_mm": 15 },
     { "type": "qr", "data": "https://x", "size_mm": 14, "x_mm": 18, "y_mm": 14 },
     { "type": "image", "src": "data:image/png;base64,…", "width_mm": 20, "x_mm": 2, "y_mm": 4 }
   ]
@@ -266,7 +273,7 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 | `items[].type` | string | `text` / `barcode` / `qr` / `image` |
 | `items[].x_mm` / `y_mm` | number | 相对标签纸左上角坐标（mm）；编辑器总是输出 |
 | text：`text` / `size` / `bold` / `align` | | 内容 / dot 字号 / 加粗 / `left`·`center`·`right` |
-| barcode：`data` / `symbology` / `height_mm` | | 数据 / `code128`·`ean13`·`code39` / 条码高度（mm） |
+| barcode：`data` / `symbology` / `width_mm` / `height_mm` | | 数据 / `code128`·`ean13`·`code39` / 请求宽度（mm，5–72） / 条码高度（mm） |
 | qr：`data` / `size_mm` | | 数据 / 边长（mm） |
 | image：`src` / `width_mm` / `height_mm` / `align` | | dataURL（必填）/ 宽（默认 20）/ 高（可选，缺省按原图比例）/ 对齐 |
 
@@ -282,7 +289,8 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 其他说明：
 
 - 纸卷偏移、文本折行宽度、条码高度、二维码边长全部按 mm 计算；
-- 编辑器的条码/二维码只是示意，**实际条码由服务端生成，宽度以预览为准**（属性面板条码区也有该提示）；
+- 画布条码/二维码来自 `/api/element/render`（与 `/api/preview`、`/api/print` 同一 zint 渲染器）；打印 spec 只带 `width_mm` / `size_mm` 等参数，后端按同参数重渲染，因此画布 = 预览 = 打印；
+- 条码实际宽度受模块整数取整（例如请求 22mm 可能渲染为 14mm），属性面板显示「实际宽度 X mm（服务端渲染）」，拖拽右边缘可直接调整；
 - 图片元素 `src` 为 dataURL（大图已在浏览器端压缩到最长边 800px / ≤2MB），服务端按 mm 尺寸 LANCZOS 缩放渲染；
 - 打开 JSON 时字段缺失会用默认值补齐（旧文件无 `offset_x_mm` 按 10、无 `offset_y_mm` 按 0、无 `trim_bottom_mm` 按 0 处理），非法 JSON / 缺少宽高会 toast 报错，不打断当前编辑。
 
@@ -304,7 +312,8 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 | 复制粘贴 | `Ctrl+C` / `Ctrl+V`（应用内剪贴板，粘贴偏移 2mm，可连续粘贴） |
 | 批量打印 | 左侧「打印工具 → 批量打印」→ 导入 CSV / 粘贴表格 → 开始打印（每行 1 份，间隔 1s，可停止） |
 | 我的模板 | 左侧「我的模板」→ 输入名称保存 → 点击模板一键新建 / 垃圾桶删除 |
-| 修改参数 | 右侧属性面板（内容、字号、加粗、对齐、反白、条码符号/高度/文字、二维码尺寸） |
+| 修改参数 | 右侧属性面板（内容、字号、加粗、对齐、反白、条码符号/宽度/高度/文字、二维码尺寸） |
+| 条码/二维码尺寸 | 选中后拖条码右边缘改宽度、拖二维码右下角改尺寸，或直接改属性面板宽度/尺寸；300ms 防抖后重新请求服务端渲染 |
 | 打印机 | 点击状态栏「当前打印机 / 选择打印机」芯片 → 扫描 → 连接；选择会记在 localStorage |
 | 可打印区域 | 顶部 4mm / 底部 1mm 为硬件不可打印（浅红斜纹）；中间细线为 4–29mm 可打印区，越界仅黄色提醒 |
 | 图片元素 | 左侧元素库「图片」→ 选择 PNG / JPG / SVG → 作为画布元素加入，可拖拽/改宽高/对齐 |
@@ -353,9 +362,9 @@ $ npm run build
 vite v7.3.8 building client environment for production...
 ✓ 23 modules transformed.
 dist/index.html                   1.07 kB │ gzip:  0.65 kB
-dist/assets/index-Ba7xVZ-p.css   30.46 kB │ gzip:  6.86 kB
-dist/assets/index-Cam9aO6T.js   181.47 kB │ gzip: 65.11 kB
-✓ built in 815ms
+dist/assets/index-QiRErTqq.css   30.95 kB │ gzip:  6.95 kB
+dist/assets/index--31yHP6E.js   187.98 kB │ gzip: 66.73 kB
+✓ built in 757ms
 
 $ npm run dev        # VITE v7.3.8 ready → http://127.0.0.1:5173/
 $ curl -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/           # 200
@@ -396,7 +405,12 @@ $ curl -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/src/main.js # 200
 | 离线降级 | 后端离线 → 状态栏「后端未启动」+ 连接状态「离线」；弹窗红色横幅「后端未启动或无法连接…」+「重试」；页面正常渲染 |
 | 可打印区标注 | 顶部斜纹带高 64px（4mm×8×2）、底部 16px（1mm×8×2）、可打印区框高 400px（25mm×8×2）；标注「可打印区域 25mm」；画布说明与状态栏显示「可打印区 4–29 mm（25mm）」 |
 | 越界软提醒 | 元素 Y 设为 0 → 边框变黄、属性面板提示「超出可打印区域，打印会被裁切」；预览/打印按钮仍可用，spec 仍可保存 y=0（软提醒） |
-| 条码提示 | 属性面板条码区显示「实际条码由服务端生成，宽度以预览为准」 |
+| 条码/二维码实时渲染 | 画布条码/二维码为 blob URL 的真实 PNG：条码 112×64 px → 元素 14×8mm，二维码 96×96 px → 12×12mm；占位 SVG 数量为 0 |
+| 防抖与缓存 | 连续输入 8 个字符（60ms 间隔）只发 1 次 /api/element/render；缓存 key 含 type/symbology/data/width/height/show_text |
+| 拖拽改尺寸 | 拖条码右边缘 width_mm 22→24 并重新请求；拖二维码右下角 size 12→14（返回 100×100 px，画布按 12.5mm 显示） |
+| 实际宽度提示 | 属性面板显示「实际宽度 14.0 mm（服务端渲染，位图 112×64 px · 203dpi）」，旧「示意宽约…以预览为准」已移除 |
+| 离线回退 | 拦截 /api/element/render 后刷新：画布回退示意占位、页面不白屏、属性面板提示失败；恢复后端并改参数后重新显示真实图 |
+| 打印一致性 | mock 捕获打印 spec：barcode `width_mm:24, height_mm:9`、qr `size_mm:14`；后端 element/render 与 preview 的黑色像素尺寸一致（条码 224×70、二维码 96×96 / 100×100） |
 | 图片元素（SVG） | 元素库「图片」选择 SVG → 画布出现 image 元素：原图 300×150、宽 20mm、等比高 10mm、y=4；选中后属性面板含 X/Y/宽度/高度/对齐/等比 |
 | 图片元素编辑 | 宽改 30 → 等比高自动 15mm；高度固定 8 → spec `height_mm:8`；勾回等比 → spec 省略 height；对齐居中 → spec `align:"center"`；拖动 +2/+1mm 生效 |
 | 大图体积控制 | 2.8MB PNG（2000×1500）→ 画布元素原图 800×600、dataURL 约 0.4MB（PNG 超限降级 JPEG）；spec 面板 src 截断提示，复制/导出仍为完整 dataURL |
@@ -417,7 +431,7 @@ $ curl -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/src/main.js # 200
 
 ## 11. 已知限制 / 后续计划
 
-- 画布中条码/二维码是**示意占位**，不是可扫描编码；条码示意宽度为启发式估算，实际打印宽度以后端 zint 为准（请以「预览 PNG」核对）。
+- 画布条码/二维码由后端实时渲染（离线时回退示意占位）；实际宽度/尺寸受后端模块整数取整，可能与请求值略有差异，以属性面板「实际宽度」和画布显示为准。
 - 暂无撤销/重做与多标签页；可后续基于 store 快照补充。
 - 未包含 Electron 打包壳（可选，不影响 `npm run dev` / `build`）。
 - 界面按桌面使用设计，最小宽度约 1024px；移动端未适配。

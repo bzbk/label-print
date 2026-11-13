@@ -20,6 +20,7 @@ import {
   round1,
   wrapTextLines,
 } from './units'
+import { itemRenderedSizeMm } from './elementRender'
 
 let idSeq = 1
 
@@ -95,6 +96,7 @@ export const LIMITS = {
   trim_bottom_mm: [0, 5],
   textSize: [6, 120],
   barcodeHeight: [4, 40],
+  barcodeWidth: [5, 72],
   qrSize: [6, 60],
 }
 
@@ -134,6 +136,7 @@ export function createItem(type, doc = createDoc(), patch = {}) {
       ...base,
       data: 'ABC123',
       symbology: 'code128',
+      width_mm: 20,
       height_mm: 12,
       show_text: true,
       x_mm: 2,
@@ -168,14 +171,25 @@ export function createItem(type, doc = createDoc(), patch = {}) {
   throw new Error(`未知元素类型：${type}`)
 }
 
-/** 条码示意图宽度（mm）。真实条码由后端 zint 生成，前端只做近似占位。 */
-export function barcodeWidthMm(item) {
+/** 旧标签没有 width_mm 时的估算宽度（仅回退用） */
+export function barcodeEstimatedWidthMm(item) {
   const length = [...String(item.data ?? '')].length
   let width
   if (item.symbology === 'ean13') width = 32
   else if (item.symbology === 'code39') width = Math.max(10, length * 2.2 + 5)
   else width = Math.max(10, length * 1.45 + 5)
   return round1(Math.min(width, 120))
+}
+
+/** 条码元素宽度（mm）：以用户/服务端确认的 width_mm 为准；缺省才用估算值 */
+export function barcodeWidthMm(item) {
+  const explicit = Number(item.width_mm)
+  if (Number.isFinite(explicit) && explicit > 0) {
+    return round1(clamp(explicit, LIMITS.barcodeWidth[0], LIMITS.barcodeWidth[1]))
+  }
+  return round1(
+    clamp(barcodeEstimatedWidthMm(item), LIMITS.barcodeWidth[0], LIMITS.barcodeWidth[1]),
+  )
 }
 
 /** 条码占位总高度：条码高度 + 人眼可读文字高度（若开启） */
@@ -223,6 +237,10 @@ export function itemBoxMm(item, doc) {
     }
   }
   if (item.type === 'barcode') {
+    const rendered = itemRenderedSizeMm(item)
+    if (rendered) {
+      return { w_mm: round1(rendered.w_mm), h_mm: round1(rendered.h_mm), layout: null }
+    }
     return { w_mm: barcodeWidthMm(item), h_mm: barcodeBoxHeightMm(item), layout: null }
   }
   if (item.type === 'image') {
@@ -233,6 +251,14 @@ export function itemBoxMm(item, doc) {
         ? clamp(explicitHeight, IMAGE_LIMITS.height_mm[0], IMAGE_LIMITS.height_mm[1])
         : clamp(width * imageAspect(item), IMAGE_LIMITS.height_mm[0], IMAGE_LIMITS.height_mm[1])
     return { w_mm: round1(width), h_mm: round1(height), layout: null }
+  }
+  if (item.type === 'qr') {
+    const rendered = itemRenderedSizeMm(item)
+    if (rendered) {
+      return { w_mm: round1(rendered.w_mm), h_mm: round1(rendered.h_mm), layout: null }
+    }
+    const size = clamp(Number(item.size_mm) || 14, LIMITS.qrSize[0], LIMITS.qrSize[1])
+    return { w_mm: size, h_mm: size, layout: null }
   }
   const size = clamp(Number(item.size_mm) || 14, LIMITS.qrSize[0], LIMITS.qrSize[1])
   return { w_mm: size, h_mm: size, layout: null }
@@ -325,6 +351,11 @@ export function clampItemFields(item) {
     item.bold = !!item.bold
     item.invert = !!item.invert
   } else if (item.type === 'barcode') {
+    item.width_mm = clamp(
+      Number(item.width_mm) || 20,
+      LIMITS.barcodeWidth[0],
+      LIMITS.barcodeWidth[1],
+    )
     item.height_mm = clamp(Number(item.height_mm) || 12, LIMITS.barcodeHeight[0], LIMITS.barcodeHeight[1])
     if (!SYMBOLOGIES.some((s) => s.value === item.symbology)) item.symbology = 'code128'
     item.data = String(item.data ?? '')
@@ -372,6 +403,7 @@ export function itemToSpec(item) {
       ...base,
       data: String(item.data ?? ''),
       symbology: item.symbology || 'code128',
+      width_mm: barcodeWidthMm(item),
       height_mm: round1(Number(item.height_mm) || 12),
     }
     if (item.show_text) spec.show_text = true // 可选扩展：人眼可读文字
@@ -463,8 +495,14 @@ export function fromSpec(raw) {
       item.invert = !!rawItem.invert
     } else if (type === 'barcode') {
       item.data = String(rawItem.data ?? '')
-      item.symbology = SYMBOLOGIES.some((s) => s.value === rawItem.symbology) ? rawItem.symbology : 'code128'
+      item.symbology = SYMBOLOGIES.some((s) => s.value === rawItem.symbology)
+        ? rawItem.symbology
+        : 'code128'
       item.height_mm = clamp(toNumber(rawItem.height_mm, 12), LIMITS.barcodeHeight[0], LIMITS.barcodeHeight[1])
+      item.width_mm =
+        rawItem.width_mm === undefined || rawItem.width_mm === null
+          ? barcodeEstimatedWidthMm(item)
+          : clamp(toNumber(rawItem.width_mm, 20), LIMITS.barcodeWidth[0], LIMITS.barcodeWidth[1])
       item.show_text = rawItem.show_text !== false
     } else if (type === 'qr') {
       item.data = String(rawItem.data ?? '')
@@ -510,6 +548,7 @@ export function templateDoc(name = 'material') {
         createItem('barcode', null, {
           data: 'SF1234567890',
           symbology: 'code128',
+          width_mm: 30,
           height_mm: 14,
           show_text: true,
           x_mm: 2,
@@ -534,6 +573,7 @@ export function templateDoc(name = 'material') {
       createItem('barcode', null, {
         data: 'ABC123456',
         symbology: 'code128',
+        width_mm: 22,
         height_mm: 9,
         show_text: true,
         x_mm: 2,

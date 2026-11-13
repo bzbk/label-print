@@ -36,6 +36,68 @@ SERVER_INFO = {"name": "gofor-label", "version": "1.0.0"}
 PROTOCOL_VERSION = "2024-11-05"
 _REAL_STDOUT = sys.stdout
 
+API_BASE = os.environ.get("GOFOR_LABEL_API", "http://127.0.0.1:17600")
+
+
+def _http_up(timeout: float = 0.8) -> bool:
+    """后端服务是否在线：在线时 MCP 走 HTTP，避免两个进程同时占用蓝牙 SPP。"""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(API_BASE + "/api/health", timeout=timeout) as r:
+            return r.status == 200
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _http_json(path: str, payload: dict | None = None, timeout: float = 120):
+    import urllib.request
+    data = None if payload is None else json.dumps(payload).encode()
+    req = urllib.request.Request(API_BASE + path, data=data,
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode() or "{}")
+
+
+def _http_png(path: str, timeout: float = 60) -> bytes:
+    import urllib.request
+    with urllib.request.urlopen(API_BASE + path, timeout=timeout) as r:
+        return r.read()
+
+
+def _proxy_http(name: str, args: dict):
+    """把工具调用代理到后端 REST API；不支持的返回 None。"""
+    import urllib.parse
+    try:
+        if name == "label_models":
+            return _http_json("/api/models", timeout=15)
+        if name == "label_devices":
+            return _http_json("/api/devices", timeout=15)
+        if name == "label_status":
+            q = urllib.parse.urlencode({k: args[k] for k in ("model", "addr") if args.get(k)})
+            return _http_json("/api/status" + (("?" + q) if q else ""), timeout=30)
+        if name == "label_learn":
+            return _http_json("/api/learn", {}, timeout=120)
+        if name in ("label_preview", "label_print"):
+            spec_obj = _spec_from_args(args).to_dict()
+            if name == "label_preview":
+                q = urllib.parse.urlencode({"spec": json.dumps(spec_obj, ensure_ascii=False)})
+                png = _http_png("/api/preview?" + q, timeout=60)
+                out = args.get("output_path") or os.path.join(HERE, "preview.png")
+                with open(out, "wb") as f:
+                    f.write(png)
+                return {"ok": True, "path": out, "size": [spec_obj["width_px"] + spec_obj["offset_x_px"],
+                        spec_obj["height_px"]], "width_mm": spec_obj["width_mm"],
+                        "height_mm": spec_obj["height_mm"],
+                        "offset_x_mm": spec_obj["offset_x_mm"], "spec": spec_obj,
+                        "via": "http"}
+            res = _http_json("/api/print", spec_obj, timeout=180)
+            res.setdefault("via", "http")
+            return res
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
 
 @contextlib.contextmanager
 def quiet():
@@ -283,7 +345,7 @@ def handle(msg: dict):
         try:
             if not tool:
                 raise KeyError(f"unknown tool {name!r}")
-            result = tool["handler"](args)
+            result = (_proxy_http(name, args) if _http_up() else None) or tool["handler"](args)
             text = json.dumps(result, ensure_ascii=False, indent=2)
             is_error = result.get("ok") is False
         except Exception as e:  # noqa: BLE001

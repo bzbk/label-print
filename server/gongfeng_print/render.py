@@ -165,8 +165,9 @@ def zint_png(symbology: str, data: str, *, target_px: int,
         # 2) 整数模块宽度：默认 2px（203dpi 下约 0.25mm X-dim），
         #    可用宽度放不下时退到 1px，仍放不下则由上层等比缩小。
         room = int(target_px) // modules if modules else 0
-        # 整数模块宽度：203dpi 下 2px≈0.25mm（推荐），最多 4px；放不下时退到 1px
-        module_px = max(1, min(4, room))
+        # 整数模块宽度：优先按目标宽度四舍五入，保证"所见即所得"，最多 4px
+        want = int(round(int(target_px) / modules)) if modules else 0
+        module_px = max(1, min(4, max(want, 1), max(room, 1)))
         # 条码总高 = module_px * (height_units + 8*show_text)
         h_units = max(1, target_total // module_px - (8 if show_text else 0))
         img = _zint_raw(sid, data, scale=module_px / 2, height=h_units,

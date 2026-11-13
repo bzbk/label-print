@@ -125,6 +125,45 @@ function persistPrinterSettings(params) {
 
 const storedPrinterSettings = readStoredPrinterSettings()
 
+/* --------------------------------------------- 我的模板（localStorage） */
+
+const TEMPLATES_STORAGE_KEY = 'gofor-label-templates-v1'
+const MAX_SAVED_TEMPLATES = 30
+
+function readStoredTemplates() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return []
+    const raw = window.localStorage.getItem(TEMPLATES_STORAGE_KEY)
+    if (!raw) return []
+    const data = JSON.parse(raw)
+    if (!Array.isArray(data)) return []
+    return data
+      .filter(
+        (entry) =>
+          entry &&
+          typeof entry.id === 'string' &&
+          typeof entry.name === 'string' &&
+          entry.spec &&
+          typeof entry.spec === 'object',
+      )
+      .slice(0, MAX_SAVED_TEMPLATES)
+  } catch {
+    return []
+  }
+}
+
+function persistTemplates(templates) {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return false
+    window.localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(templates))
+    return true
+  } catch {
+    return false
+  }
+}
+
+const storedTemplates = readStoredTemplates()
+
 export const state = reactive({
   // 首次打开给一份可编辑的示例标签，便于直接看到 40×30 的真实排版效果；
   // 「新建」会得到空白标签。
@@ -177,6 +216,13 @@ export const state = reactive({
   },
   /** 图片元素处理中（文件读取/栅格化/压缩） */
   imageProcessing: false,
+  /** 批量打印弹窗 */
+  batchPrint: {
+    open: false,
+    running: false,
+  },
+  /** 我的模板（localStorage） */
+  savedTemplates: storedTemplates,
   /** 打印机扫描/选择弹窗 */
   printerDialog: {
     open: false,
@@ -1254,6 +1300,69 @@ export async function addImageElementFromFile(file) {
     return null
   } finally {
     state.imageProcessing = false
+  }
+}
+
+/* ------------------------------------------------------- 批量打印 / 模板 */
+
+export function openBatchPrint() {
+  if (!state.printer.addr) {
+    showToast('请先选择打印机', 'warn', 4500)
+    openPrinterDialog()
+    return false
+  }
+  state.batchPrint.open = true
+  return true
+}
+
+export function closeBatchPrint() {
+  if (state.batchPrint.running) {
+    showToast('批量打印进行中，请先停止或等待完成', 'warn', 3000)
+    return
+  }
+  state.batchPrint.open = false
+}
+
+/** 把当前标签保存为本地模板（spec 快照） */
+export function saveCurrentAsTemplate(name) {
+  const templateName =
+    String(name ?? '').trim() || String(state.doc.name || '').trim() || '未命名模板'
+  const template = {
+    id: `tpl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    name: templateName,
+    createdAt: new Date().toISOString(),
+    spec: JSON.parse(JSON.stringify(toSpec(state.doc))),
+  }
+  const next = [template, ...state.savedTemplates].slice(0, MAX_SAVED_TEMPLATES)
+  if (!persistTemplates(next)) {
+    showToast('保存模板失败：localStorage 空间不足或不可用', 'error', 6000)
+    return null
+  }
+  state.savedTemplates = next
+  showToast(`已保存模板「${templateName}」`, 'success', 2600)
+  return template
+}
+
+export function deleteSavedTemplate(id) {
+  const next = state.savedTemplates.filter((template) => template.id !== id)
+  if (!persistTemplates(next)) {
+    showToast('删除模板失败：localStorage 不可用', 'error', 5000)
+    return
+  }
+  state.savedTemplates = next
+  showToast('已删除模板', 'info', 1800)
+}
+
+/** 从本地模板一键新建标签 */
+export function applySavedTemplate(id) {
+  const template = state.savedTemplates.find((entry) => entry.id === id)
+  if (!template) return false
+  try {
+    loadSpec(template.spec, { name: template.name })
+    return true
+  } catch (error) {
+    showToast(`载入模板失败：${error.message || error}`, 'error', 6000)
+    return false
   }
 }
 

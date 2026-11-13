@@ -23,6 +23,8 @@ POST /api/learn                  测纸（会走纸）
 """
 from __future__ import annotations
 
+import io
+
 # 允许 `python3 gongfeng_print/server.py` 直接运行（相对导入需要包上下文）。
 if __package__ in (None, ""):  # pragma: no cover - 仅脚本直跑时触发
     import pathlib
@@ -331,6 +333,30 @@ class Api:
                 self._refresh_event.set()
 
         threading.Thread(target=worker, name="status-refresh", daemon=True).start()
+
+    def render_element(self, payload: dict[str, Any]) -> bytes:
+        """渲染单个条码/二维码为 PNG（供前端画布实时预览，与打印同一渲染器）。"""
+        from .render import zint_png, zint_available
+        if not zint_available():
+            raise ApiError("服务端未安装 zint", 500)
+        kind = str(payload.get("type") or "barcode").lower()
+        data = str(payload.get("data") or "")
+        if not data:
+            raise ApiError("缺少 data", 400)
+        if kind == "qr":
+            side_mm = float(payload.get("size_mm") or 14.0)
+            target = max(8, int(round(side_mm / 25.4 * 203)))
+            img = zint_png("qr", data, target_px=target)
+        else:
+            sym = str(payload.get("symbology") or "code128").lower()
+            width_mm = float(payload.get("width_mm") or 30.0)
+            height_mm = float(payload.get("height_mm") or 12.0)
+            target = max(8, int(round(width_mm / 25.4 * 203)))
+            img = zint_png(sym, data, target_px=target, height_mm=height_mm,
+                           show_text=bool(payload.get("show_text", True)))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
 
     def print_image(self, data: bytes, *, width_mm: float = 40.0,
                     height_mm: float = 30.0, offset_x_mm: float = 10.0,
@@ -914,6 +940,12 @@ class ApiHandler(BaseHTTPRequestHandler):
                 density=int(float(q["density"] or 75)),
                 align=q["align"] or "left",
                 addr=q["addr"]))
+        elif path == "/api/element/render":
+            payload = self._read_json()
+            if not isinstance(payload, dict):
+                raise ApiError("请求体必须是 JSON 对象", 400)
+            png = self.api.render_element(payload)
+            self._send(png, "image/png")
         elif path == "/api/status":
             self._send_json(self.api.status(
                 model=_first(query, "model"), addr=_first(query, "addr"),

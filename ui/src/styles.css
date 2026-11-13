@@ -1894,6 +1894,210 @@ kbd {
   color: #a2abbb;
 }
 
+/* 我的模板 / 批量打印 */
+.template-save-row {
+  display: flex;
+  gap: 6px;
+  margin: 0 4px 8px;
+}
+
+.template-name-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 11.5px;
+}
+
+.template-name-input:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.saved-template-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 7px;
+}
+
+.saved-template-row .palette-card {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.template-delete {
+  flex: none;
+}
+
+.palette-empty {
+  margin: 2px 6px 10px;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.batch-modal {
+  width: min(760px, 94vw);
+}
+
+.batch-body {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  max-height: 64vh;
+  overflow: auto;
+  background: #f6f7fa;
+}
+
+.batch-source-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.batch-file-name {
+  color: var(--ink-3);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.batch-textarea {
+  width: 100%;
+  min-height: 128px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.65;
+  resize: vertical;
+}
+
+.batch-textarea:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.batch-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.batch-placeholders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 7px 9px;
+  border: 1px solid #c7d7fb;
+  border-radius: 7px;
+  background: #f2f6ff;
+  color: #1d4ed8;
+  font-size: 11.5px;
+}
+
+.batch-missing {
+  color: #b45309;
+}
+
+.batch-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.batch-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.batch-table th,
+.batch-table td {
+  padding: 5px 9px;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.batch-table th {
+  background: #f8fafc;
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.batch-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.batch-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 11.5px;
+}
+
+.batch-preview-title {
+  color: var(--ink-3);
+}
+
+.batch-preview-item {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.batch-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+}
+
+.batch-progress progress {
+  width: 100%;
+  height: 9px;
+  accent-color: var(--accent);
+}
+
+.batch-failed {
+  padding: 8px 10px;
+  border: 1px solid #f5c2c0;
+  border-radius: 8px;
+  background: #fff5f4;
+  color: #b91c1c;
+  font-size: 11.5px;
+}
+
+.batch-failed-title {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.batch-failed ul {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.6;
+}
+
 /* 打印机设置（写入设备 207/208） */
 
 .printer-settings {

@@ -6,10 +6,12 @@ import LabelCanvas from './components/LabelCanvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
 import StatusBar from './components/StatusBar.vue'
 import PrinterDialog from './components/PrinterDialog.vue'
+import BatchPrintDialog from './components/BatchPrintDialog.vue'
 import PreviewDialog from './components/PreviewDialog.vue'
 import ToastStack from './components/ToastStack.vue'
 import {
   clearSelection,
+  closeBatchPrint,
   closePreview,
   closePrinterDialog,
   copySelected,
@@ -84,6 +86,10 @@ function onKeydown(event) {
     return
   }
   if (key === 'Escape') {
+    if (state.batchPrint.open) {
+      closeBatchPrint()
+      return
+    }
     if (state.printerDialog.open) {
       closePrinterDialog()
       return
@@ -132,6 +138,7 @@ onBeforeUnmount(() => {
     </main>
     <StatusBar />
     <PreviewDialog />
+    <BatchPrintDialog />
     <PrinterDialog />
     <ToastStack />
   </div>

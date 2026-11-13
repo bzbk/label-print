@@ -1,0 +1,14 @@
+# 本服务不需要任何 pip 包；HTTP/JSON/蓝牙 socket/ctypes 全部使用 Python 标准库。
+# 下面列出所需系统依赖（Arch Linux 包名），缺失时 selftest.py 会明确报错：
+#
+#   python-pillow    Pillow（PIL）：画布与文字渲染
+#   zint             条码/二维码 PNG 生成命令（render.py 调用 `zint` CLI）
+#   lzo              liblzo2.so.2：LZO1X-1 帧压缩（hprt_m1.py 用 ctypes 调用）
+#   bluez            bluetoothctl（设备发现）+ RFCOMM SPP socket 支持
+#   noto-fonts-cjk   中文字体（可选；缺失时回退 DejaVu / PIL 内置字体）
+#
+# 安装示例（Arch Linux）：
+#   sudo pacman -S python-pillow zint lzo bluez-utils noto-fonts-cjk
+#
+# 严禁引入 Flask / FastAPI / 其他 Web 框架：HTTP 服务使用标准库
+# http.server.ThreadingHTTPServer，保持零第三方 Python 依赖。

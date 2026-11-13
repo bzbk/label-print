@@ -1,0 +1,24 @@
+# dependencies / build artifacts
+node_modules/
+dist/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# generated previews and local data
+preview.png
+server/preview.png
+*.log
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# secrets — never commit
+.github-token
+*.token
+.env

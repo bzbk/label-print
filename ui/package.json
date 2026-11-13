@@ -1,0 +1,22 @@
+{
+  "name": "gofor-label-print",
+  "version": "0.1.0",
+  "private": true,
+  "description": "共风 GoFor Label Print · 原生 Vue 3 标签设计器（203dpi / mm 坐标 / 纸卷偏移 / 无重型画布库）",
+  "type": "module",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4173"
+  },
+  "dependencies": {
+    "vue": "^3.5.45"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.11",
+    "vite": "^7.3.8"
+  }
+}

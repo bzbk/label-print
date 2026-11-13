@@ -116,7 +116,11 @@ const dotHeight = computed(() => Math.round(state.doc.height_mm * 8))
       <span>偏移 {{ offsetMm }} mm</span>
       <span v-if="offsetY !== 0">垂直 {{ offsetY }} mm</span>
       <span>少走 {{ trimMm }} mm</span>
-      <span>可打印区 {{ printZone.topMm }}–{{ printZone.bottomMm }} mm（{{ printZone.heightMm }} mm）</span>
+      <span>
+        可打印 {{ printZone.widthMm }}×{{ printZone.heightMm }}mm（上{{ printZone.topMarginMm }}/下{{
+          printZone.bottomMarginMm
+        }}/右{{ printZone.rightMarginMm }}）
+      </span>
       <span>位图 {{ dotWidth }} × {{ dotHeight }} dot</span>
       <span>元素 {{ state.doc.items.length }}</span>
       <span>缩放 {{ Math.round(state.zoom * 100) }}%</span>

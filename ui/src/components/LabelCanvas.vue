@@ -52,13 +52,13 @@ const trimMm = computed(() => Number(doc.value.trim_bottom_mm) || 0)
 const trimPx = computed(() => trimMm.value * DOT_PER_MM * zoom.value)
 const printHeightMm = computed(() => Math.max(0, round1(doc.value.height_mm - trimMm.value)))
 
-/** 硬件可打印区域（实测）：顶部 4mm、底部 1mm 不可打印（仅标注，不限制拖拽） */
+/** 可配置的不可打印边距（上/下/右）：仅标注与软提醒，不限制拖拽 */
 const printZone = computed(() => printableZoneMm(doc.value))
-const topBandPx = computed(() => printZone.value.topMm * DOT_PER_MM * zoom.value)
-const bottomBandPx = computed(
-  () => Math.max(0, doc.value.height_mm - printZone.value.bottomMm) * DOT_PER_MM * zoom.value,
-)
+const topBandPx = computed(() => printZone.value.topMarginMm * DOT_PER_MM * zoom.value)
+const bottomBandPx = computed(() => printZone.value.bottomMarginMm * DOT_PER_MM * zoom.value)
+const rightBandPx = computed(() => printZone.value.rightMarginMm * DOT_PER_MM * zoom.value)
 const printableTopPx = computed(() => printZone.value.topMm * DOT_PER_MM * zoom.value)
+const printableWidthPx = computed(() => printZone.value.widthMm * DOT_PER_MM * zoom.value)
 const printableHeightPx = computed(() => printZone.value.heightMm * DOT_PER_MM * zoom.value)
 const totalMm = computed(() => round1(doc.value.width_mm + offsetMm.value))
 const labelDotW = computed(() => doc.value.width_mm * DOT_PER_MM)
@@ -361,25 +361,40 @@ onBeforeUnmount(() => {
               <div
                 class="no-print-band no-print-band--top"
                 :style="{ height: `${topBandPx}px` }"
-                title="硬件不可打印：标签顶部 4mm（打印起点距顶部 4mm）"
+                :title="`不可打印边距：顶部 ${printZone.topMarginMm} mm`"
               >
-                <span class="no-print-band-tag">硬件不可打印（顶部 4mm）</span>
+                <span class="no-print-band-tag">不可打印（顶部 {{ printZone.topMarginMm }} mm）</span>
               </div>
               <div
                 class="no-print-band no-print-band--bottom"
                 :style="{ height: `${bottomBandPx}px` }"
-                title="硬件不可打印：标签底部 1mm"
+                :title="`不可打印边距：底部 ${printZone.bottomMarginMm} mm`"
               >
                 <span v-if="bottomBandPx >= 12" class="no-print-band-tag no-print-band-tag--bottom">
-                  硬件不可打印（底部 1mm）
+                  不可打印（底部 {{ printZone.bottomMarginMm }} mm）
+                </span>
+              </div>
+              <div
+                class="no-print-band no-print-band--right"
+                :style="{ width: `${rightBandPx}px` }"
+                :title="`不可打印边距：右侧 ${printZone.rightMarginMm} mm`"
+              >
+                <span v-if="rightBandPx >= 12" class="no-print-band-tag no-print-band-tag--right">
+                  不可打印（右 {{ printZone.rightMarginMm }} mm）
                 </span>
               </div>
               <div
                 class="printable-zone"
-                :style="{ top: `${printableTopPx}px`, height: `${printableHeightPx}px` }"
-                :title="`可打印区域：y ${printZone.topMm}–${printZone.bottomMm} mm（${printZone.heightMm} mm）`"
+                :style="{
+                  top: `${printableTopPx}px`,
+                  width: `${printableWidthPx}px`,
+                  height: `${printableHeightPx}px`,
+                }"
+                :title="`可打印区域：x 0–${printZone.rightMm} mm，y ${printZone.topMm}–${printZone.bottomMm} mm（${printZone.widthMm} × ${printZone.heightMm} mm）`"
               >
-                <span class="printable-zone-tag">可打印区域 {{ printZone.heightMm }}mm</span>
+                <span class="printable-zone-tag">
+                  可打印区域 {{ printZone.widthMm }} × {{ printZone.heightMm }} mm
+                </span>
               </div>
 
               <LabelElement
@@ -443,7 +458,11 @@ onBeforeUnmount(() => {
             打印头坐标 0–{{ totalMm }} mm
             <span v-if="offsetY !== 0">· 垂直微调 {{ offsetY }} mm</span>
             <span v-if="trimMm > 0">· 底部少走 {{ trimMm }} mm（不打印）</span>
-            <span>· 可打印区 {{ printZone.topMm }}–{{ printZone.bottomMm }} mm（{{ printZone.heightMm }} mm）</span>
+            <span>
+              · 可打印区 {{ printZone.widthMm }} × {{ printZone.heightMm }} mm（上
+              {{ printZone.topMarginMm }}/下 {{ printZone.bottomMarginMm }}/右
+              {{ printZone.rightMarginMm }}）
+            </span>
           </div>
         </div>
       </div>

@@ -109,6 +109,9 @@ export function createDoc(patch = {}) {
     offset_x_mm: OFFSET_X_MM.default,
     offset_y_mm: OFFSET_Y_MM.default,
     trim_bottom_mm: TRIM_BOTTOM_MM.default,
+    margin_top_mm: PRINT_MARGIN_DEFAULTS.top_mm,
+    margin_bottom_mm: PRINT_MARGIN_DEFAULTS.bottom_mm,
+    margin_right_mm: PRINT_MARGIN_DEFAULTS.right_mm,
     density: 75,
     align: 'left',
     items: [],
@@ -118,6 +121,7 @@ export function createDoc(patch = {}) {
 
 export function createItem(type, doc = createDoc(), patch = {}) {
   const base = { id: newId(), type }
+  const defaultTopMm = doc ? printableZoneMm(doc).topMm : PRINT_ZONE_TOP_MM
   if (type === 'text') {
     return {
       ...base,
@@ -127,7 +131,7 @@ export function createItem(type, doc = createDoc(), patch = {}) {
       align: 'left',
       invert: false,
       x_mm: 2,
-      y_mm: PRINT_ZONE_TOP_MM,
+      y_mm: defaultTopMm,
       ...patch,
     }
   }
@@ -150,7 +154,7 @@ export function createItem(type, doc = createDoc(), patch = {}) {
       data: 'https://gofor.example/label',
       size_mm: 14,
       x_mm: 2,
-      y_mm: PRINT_ZONE_TOP_MM,
+      y_mm: defaultTopMm,
       ...patch,
     }
   }
@@ -164,7 +168,7 @@ export function createItem(type, doc = createDoc(), patch = {}) {
       naturalWidth: 0,
       naturalHeight: 0,
       x_mm: 2,
-      y_mm: PRINT_ZONE_TOP_MM,
+      y_mm: defaultTopMm,
       ...patch,
     }
   }
@@ -278,31 +282,63 @@ export function imageAspect(item) {
  * 硬件可打印区域（实测）：打印起点距标签顶部 4mm，底部 1mm 也不可打印。
  * 40×30 标签 → 可打印区 y = 4 ~ 29mm（25mm）。仅用于画布标注/软提示，不限制拖拽。
  */
-export const PRINT_ZONE_TOP_MM = 4
-export const PRINT_ZONE_BOTTOM_MM = 1
+/** 默认不可打印边距：上 3 / 下 3 / 右 2（左侧为 0，纸卷偏移另管） */
+export const PRINT_MARGIN_DEFAULTS = { top_mm: 3, bottom_mm: 3, right_mm: 2 }
+export const PRINT_MARGIN_LIMITS = { top_mm: [0, 10], bottom_mm: [0, 10], right_mm: [0, 10] }
 
+export function snapMarginMm(value, fallback) {
+  const fallbackValue = Number.isFinite(Number(fallback)) ? Number(fallback) : 0
+  const parsed = Number(value)
+  const next = Number.isFinite(parsed) ? parsed : fallbackValue
+  return round1(clamp(next, 0, 10))
+}
+
+/** 模板/新增元素的默认顶部起点（旧常量保留给无 doc 的模板场景） */
+export const PRINT_ZONE_TOP_MM = PRINT_MARGIN_DEFAULTS.top_mm
+export const PRINT_ZONE_BOTTOM_MM = PRINT_MARGIN_DEFAULTS.bottom_mm
+
+/**
+ * 可配置的可打印区域：
+ *   x ∈ [0, width_mm - margin_right_mm]
+ *   y ∈ [margin_top_mm, height_mm - margin_bottom_mm]
+ * 仅用于画布标注与软提示，不做任何位置 clamp。
+ */
 export function printableZoneMm(doc) {
+  const width = Number(doc?.width_mm) || 0
   const height = Number(doc?.height_mm) || 0
-  const topMm = PRINT_ZONE_TOP_MM
-  const bottomMm = round1(Math.max(topMm, height - PRINT_ZONE_BOTTOM_MM))
+  const topMm = snapMarginMm(doc?.margin_top_mm, PRINT_MARGIN_DEFAULTS.top_mm)
+  const bottomMarginMm = snapMarginMm(doc?.margin_bottom_mm, PRINT_MARGIN_DEFAULTS.bottom_mm)
+  const rightMarginMm = snapMarginMm(doc?.margin_right_mm, PRINT_MARGIN_DEFAULTS.right_mm)
+  const bottomMm = round1(height - bottomMarginMm)
+  const rightMm = round1(width - rightMarginMm)
   return {
     topMm,
     bottomMm,
+    rightMm,
+    widthMm: round1(Math.max(0, rightMm)),
     heightMm: round1(Math.max(0, bottomMm - topMm)),
+    topMarginMm: topMm,
+    bottomMarginMm,
+    rightMarginMm,
   }
 }
 
-/** 元素是否超出可打印区域（y < top 或 y + 高度 > bottom）；软提示，不阻止保存/打印 */
+/** 元素是否超出可打印区域（上/下/右）；软提示，不阻止保存/打印 */
 export function itemOutsidePrintable(item, doc) {
   const box = itemBoxMm(item, doc)
   const zone = printableZoneMm(doc)
+  const x = Number(item.x_mm) || 0
   const y = Number(item.y_mm) || 0
   return {
     zone,
     box,
-    outside: y < zone.topMm - 0.05 || y + box.h_mm > zone.bottomMm + 0.05,
+    outside:
+      y < zone.topMm - 0.05 ||
+      y + box.h_mm > zone.bottomMm + 0.05 ||
+      x + box.w_mm > zone.rightMm + 0.05,
     above: y < zone.topMm - 0.05,
     below: y + box.h_mm > zone.bottomMm + 0.05,
+    right: x + box.w_mm > zone.rightMm + 0.05,
   }
 }
 
@@ -331,7 +367,7 @@ export function normalizeItemPosition(item, doc) {
 /** 新增元素时按纵向顺序摆放（避开已有元素） */
 export function autoPlaceItem(item, doc) {
   const box = itemBoxMm(item, doc)
-  let y = PRINT_ZONE_TOP_MM
+  let y = printableZoneMm(doc).topMm
   for (const other of doc.items) {
     const otherBox = itemBoxMm(other, doc)
     y = Math.max(y, (Number(other.y_mm) || 0) + otherBox.h_mm + 1.5)

@@ -676,6 +676,14 @@ kbd {
   border-top: 1px dashed rgba(220, 38, 38, 0.32);
 }
 
+.no-print-band--right {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  border-left: 1px dashed rgba(220, 38, 38, 0.32);
+}
+
 .no-print-band-tag {
   position: absolute;
   top: 2px;
@@ -698,9 +706,19 @@ kbd {
   line-height: 1.6;
 }
 
+.no-print-band-tag--right {
+  top: 4px;
+  right: auto;
+  left: 1px;
+  padding: 2px 1px;
+  writing-mode: vertical-rl;
+  font-size: 8.5px;
+  line-height: 1.2;
+}
+
 .printable-zone {
   position: absolute;
-  right: 0;
+  right: auto;
   left: 0;
   z-index: 4;
   border: 1px solid rgba(37, 99, 235, 0.42);
@@ -1323,6 +1341,13 @@ kbd {
   font-size: 10.5px;
   line-height: 1.55;
   color: var(--ink-3);
+}
+
+.margin-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .multi-grid {

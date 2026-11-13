@@ -14,9 +14,10 @@ import {
   createDoc,
   createItem,
   fromSpec,
-  PRINT_ZONE_TOP_MM,
+  PRINT_MARGIN_DEFAULTS,
   itemBoxMm,
   printableZoneMm,
+  snapMarginMm,
   newId,
   normalizeItemPosition,
   snapOffsetX,
@@ -164,10 +165,65 @@ function persistTemplates(templates) {
 
 const storedTemplates = readStoredTemplates()
 
+/* ------------------------------------------ 不可打印边距（localStorage） */
+
+const MARGINS_STORAGE_KEY = 'gofor-label-margins-v1'
+
+function readStoredMargins() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return { ...PRINT_MARGIN_DEFAULTS }
+    const raw = window.localStorage.getItem(MARGINS_STORAGE_KEY)
+    if (!raw) {
+      try {
+        window.localStorage.setItem(
+          MARGINS_STORAGE_KEY,
+          JSON.stringify(PRINT_MARGIN_DEFAULTS),
+        )
+      } catch {
+        /* ignore */
+      }
+      return { ...PRINT_MARGIN_DEFAULTS }
+    }
+    const data = JSON.parse(raw)
+    return {
+      top_mm: snapMarginMm(data?.top_mm, PRINT_MARGIN_DEFAULTS.top_mm),
+      bottom_mm: snapMarginMm(data?.bottom_mm, PRINT_MARGIN_DEFAULTS.bottom_mm),
+      right_mm: snapMarginMm(data?.right_mm, PRINT_MARGIN_DEFAULTS.right_mm),
+    }
+  } catch {
+    return { ...PRINT_MARGIN_DEFAULTS }
+  }
+}
+
+let storedMargins = readStoredMargins()
+
+/** 新建 / 打开 / 套模板时统一回填本机保存的不可打印边距 */
+function applyStoredMargins(doc) {
+  doc.margin_top_mm = storedMargins.top_mm
+  doc.margin_bottom_mm = storedMargins.bottom_mm
+  doc.margin_right_mm = storedMargins.right_mm
+  return doc
+}
+
+function persistMarginsFromDoc(doc) {
+  storedMargins = {
+    top_mm: snapMarginMm(doc.margin_top_mm, PRINT_MARGIN_DEFAULTS.top_mm),
+    bottom_mm: snapMarginMm(doc.margin_bottom_mm, PRINT_MARGIN_DEFAULTS.bottom_mm),
+    right_mm: snapMarginMm(doc.margin_right_mm, PRINT_MARGIN_DEFAULTS.right_mm),
+  }
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(MARGINS_STORAGE_KEY, JSON.stringify(storedMargins))
+    }
+  } catch {
+    /* localStorage 不可用时忽略，当前会话仍生效 */
+  }
+}
+
 export const state = reactive({
   // 首次打开给一份可编辑的示例标签，便于直接看到 40×30 的真实排版效果；
   // 「新建」会得到空白标签。
-  doc: templateDoc('material'),
+  doc: applyStoredMargins(templateDoc('material')),
   selectedId: null,
   selectedIds: [],
   /** 撤销/重做历史（JSON 快照，≥50 步） */
@@ -547,8 +603,10 @@ export function alignSelected(mode) {
   for (const item of items) {
     const box = itemBoxMm(item, state.doc)
     if (mode === 'left') item.x_mm = 0
-    if (mode === 'center') item.x_mm = round1(Math.max(0, (width - box.w_mm) / 2))
-    if (mode === 'right') item.x_mm = round1(Math.max(0, width - box.w_mm))
+    if (mode === 'center') {
+      item.x_mm = round1(Math.max(0, (zone.rightMm - box.w_mm) / 2))
+    }
+    if (mode === 'right') item.x_mm = round1(Math.max(0, zone.rightMm - box.w_mm))
     if (mode === 'top') item.y_mm = zone.topMm
     if (mode === 'middle') {
       item.y_mm = round1(zone.topMm + Math.max(0, (zone.heightMm - box.h_mm) / 2))
@@ -581,7 +639,7 @@ export function distributeSelected(axis = 'horizontal') {
   } else {
     const sorted = [...items].sort((a, b) => (Number(a.x_mm) || 0) - (Number(b.x_mm) || 0))
     const total = sorted.reduce((sum, item) => sum + itemBoxMm(item, state.doc).w_mm, 0)
-    const gap = Math.max(0, (state.doc.width_mm - total) / (sorted.length - 1))
+    const gap = Math.max(0, (zone.rightMm - total) / (sorted.length - 1))
     let cursor = 0
     for (const item of sorted) {
       item.x_mm = round1(cursor)
@@ -659,6 +717,18 @@ export function updateDoc(patch) {
   if ('offset_x_mm' in patch) doc.offset_x_mm = snapOffsetX(patch.offset_x_mm)
   if ('offset_y_mm' in patch) doc.offset_y_mm = snapOffsetY(patch.offset_y_mm)
   if ('trim_bottom_mm' in patch) doc.trim_bottom_mm = snapTrimBottom(patch.trim_bottom_mm)
+  if ('margin_top_mm' in patch) {
+    doc.margin_top_mm = snapMarginMm(patch.margin_top_mm, PRINT_MARGIN_DEFAULTS.top_mm)
+  }
+  if ('margin_bottom_mm' in patch) {
+    doc.margin_bottom_mm = snapMarginMm(patch.margin_bottom_mm, PRINT_MARGIN_DEFAULTS.bottom_mm)
+  }
+  if ('margin_right_mm' in patch) {
+    doc.margin_right_mm = snapMarginMm(patch.margin_right_mm, PRINT_MARGIN_DEFAULTS.right_mm)
+  }
+  if ('margin_top_mm' in patch || 'margin_bottom_mm' in patch || 'margin_right_mm' in patch) {
+    persistMarginsFromDoc(doc)
+  }
   if ('align' in patch) {
     doc.align = ['left', 'center', 'right'].includes(patch.align) ? patch.align : 'left'
   }
@@ -683,21 +753,21 @@ export function setPreset(preset) {
 }
 
 export function newDoc() {
-  state.doc = createDoc()
+  state.doc = applyStoredMargins(createDoc())
   clearSelection()
   resetHistory()
   showToast('已新建空白标签（40 × 30 mm）')
 }
 
 export function applyTemplate(name) {
-  state.doc = templateDoc(name)
+  state.doc = applyStoredMargins(templateDoc(name))
   clearSelection()
   resetHistory()
   showToast(`已载入模板：${state.doc.name}`, 'success', 2400)
 }
 
 export function loadSpec(raw, options = {}) {
-  const doc = fromSpec(raw)
+  const doc = applyStoredMargins(fromSpec(raw))
   if (options.name) doc.name = String(options.name)
   state.doc = doc
   clearSelection()
@@ -1283,7 +1353,7 @@ export async function addImageElementFromFile(file) {
       naturalWidth: prepared.width,
       naturalHeight: prepared.height,
       x_mm: 2,
-      y_mm: PRINT_ZONE_TOP_MM,
+      y_mm: printableZoneMm(state.doc).topMm,
     })
     normalizeItemPosition(item, state.doc)
     markHistory()

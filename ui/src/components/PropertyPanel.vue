@@ -124,7 +124,10 @@ function onPresetChange(event) {
     <!-- 多选：对齐 / 分布 / 图层 -->
     <section v-if="!item && state.selectedIds.length > 1" class="prop-section">
       <h3 class="section-title">多选（{{ state.selectedIds.length }} 个元素）</h3>
-      <p class="readout">对齐 / 分布基准：可打印区 4–29 mm（40×30）</p>
+      <p class="readout">
+        对齐 / 分布基准：可打印区 {{ printZone.widthMm }}×{{ printZone.heightMm }} mm（x
+        0–{{ printZone.rightMm }}、y {{ printZone.topMm }}–{{ printZone.bottomMm }}）
+      </p>
       <div class="multi-grid">
         <button class="btn btn-light btn--small" @click="alignSelected('left')">左对齐</button>
         <button class="btn btn-light btn--small" @click="alignSelected('center')">水平居中</button>
@@ -199,8 +202,10 @@ function onPresetChange(event) {
         {{ fmt(offsetMm + item.x_mm) }} mm
       </p>
       <p v-if="itemOutsidePrintZone" class="readout readout--warn">
-        超出可打印区域，打印会被裁切（可打印区 {{ printZone.topMm }}–{{ printZone.bottomMm }} mm；当前
-        y={{ item.y_mm }} mm，底边 {{ fmt(item.y_mm + box.h_mm) }} mm）。仍可保存/打印，仅作提醒。
+        超出可打印区域，打印会被裁切（可打印区 {{ printZone.widthMm }} × {{ printZone.heightMm }} mm；
+        x={{ fmt(item.x_mm) }}、右缘 {{ fmt(item.x_mm + box.w_mm) }}/{{ printZone.rightMm }}，y={{
+          fmt(item.y_mm)
+        }}、底边 {{ fmt(item.y_mm + box.h_mm) }}/{{ printZone.bottomMm }}）。仍可保存/打印，仅作提醒。
       </p>
 
       <!-- 文本 -->
@@ -430,9 +435,46 @@ function onPresetChange(event) {
           />
         </label>
       </div>
+      <div class="margin-grid">
+        <label class="field">
+          上边距
+          <input
+            type="number"
+            min="0"
+            max="10"
+            step="0.5"
+            :value="state.doc.margin_top_mm"
+            @change="updateDoc({ margin_top_mm: numberValue($event, state.doc.margin_top_mm) })"
+          />
+        </label>
+        <label class="field">
+          下边距
+          <input
+            type="number"
+            min="0"
+            max="10"
+            step="0.5"
+            :value="state.doc.margin_bottom_mm"
+            @change="updateDoc({ margin_bottom_mm: numberValue($event, state.doc.margin_bottom_mm) })"
+          />
+        </label>
+        <label class="field">
+          右边距
+          <input
+            type="number"
+            min="0"
+            max="10"
+            step="0.5"
+            :value="state.doc.margin_right_mm"
+            @change="updateDoc({ margin_right_mm: numberValue($event, state.doc.margin_right_mm) })"
+          />
+        </label>
+      </div>
       <p class="readout readout--note">
-        硬件打印起点距顶部 {{ printZone.topMm }} mm；可打印区
-        {{ printZone.topMm }}–{{ printZone.bottomMm }} mm（{{ printZone.heightMm }} mm）。超出区域仅软提示，仍可保存/打印。
+        不可打印边距：上 {{ printZone.topMarginMm }} / 下 {{ printZone.bottomMarginMm }} / 右
+        {{ printZone.rightMarginMm }} mm（左侧 0，纸卷偏移另管）。可打印区
+        {{ printZone.widthMm }} × {{ printZone.heightMm }} mm（x 0–{{ printZone.rightMm }}、y
+        {{ printZone.topMm }}–{{ printZone.bottomMm }}）。超出区域仅软提示，仍可保存/打印。
       </p>
       <label class="field field--stack">
         尺寸预设

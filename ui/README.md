@@ -10,12 +10,17 @@
 - 中：打印头坐标 mm 标尺 + 1mm 网格；**左侧灰斜纹 = 纸卷偏移留白（10mm），红色虚线 = 打印头原点 x=0**；顶部/底部浅红斜纹标出硬件不可打印区，中间细线框出可打印区域
 - 右：所选元素 / 标签属性（含纸卷偏移说明）+ 实时 spec JSON
 - 顶：品牌、新建、打开/保存 JSON、标签预设、**纸卷偏移 / 垂直微调 / 底部少走**、份数、浓度、对齐、预览、打印
+- 编辑：**撤销/重做（80 步）**、Shift 多选 / Ctrl+A 全选、以可打印区为基准的**对齐 / 等距分布**、图层上移/下移/置顶/置底、Ctrl+C/V 复制粘贴
 - 打印机：状态栏入口 → **扫描蓝牙 / 选择 / 连接**，并支持**写入设备参数（207/208）**；记住上次选择与参数（localStorage），预览/打印请求自动带 `addr`
 - 底：打印机状态（型号 / 状态 / 错误）、刷新、测纸、**偏移 / 可打印区 / 位图尺寸**
 
 画布会标注硬件可打印区域：顶部 4mm / 底部 1mm 浅红斜纹不可打印，40×30 的可打印区为 4–29mm；元素越界时边框变黄并给出软提示（仍可保存/打印）：
 
 ![可打印区域标注](./docs/print-zone.png)
+
+Shift / Ctrl 点击可多选，画布显示整体包围盒；右侧「多选」面板以可打印区为基准做对齐 / 等距分布 / 图层次序：
+
+![多选与对齐](./docs/multi-select.png)
 
 左侧元素库新增「图片」：选择 PNG / JPG / SVG 后作为**画布元素**参与排版（可拖拽、改宽高/对齐，最终随整个标签渲染）：
 
@@ -67,7 +72,7 @@ ui/
 ├── index.html            # 入口 HTML（中文 lang、原创 favicon）
 ├── package.json          # name: gofor-label-print，仅 vue + vite + @vitejs/plugin-vue
 ├── vite.config.js
-├── docs/                 # 自测截图（editor / printer-dialog / image-element / print-zone / offset-y / trim-bottom / preview / offline-preview）
+├── docs/                 # 自测截图（editor / multi-select / printer-dialog / image-element / print-zone / …）
 ├── README.md
 └── src/
     ├── main.js
@@ -280,8 +285,14 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 | --- | --- |
 | 添加元素 | 左侧元素库点击「文本 / 一维条码 / 二维码」 |
 | 选中 / 取消 | 点击元素 / 点击画布空白处（含偏移留白）或 `Esc` |
-| 移动 | 鼠标拖动（1mm 吸附；`Shift` 为 0.1mm；方向键 1mm，`Shift`+方向键 0.2mm） |
-| 删除 / 复制 | `Delete` / `Ctrl+D` |
+| 移动 | 鼠标拖动（1mm 吸附；`Shift` 为 0.1mm；方向键 0.5mm，`Shift`+方向键 0.1mm；多选时整体移动） |
+| 撤销 / 重做 | `Ctrl+Z` / `Ctrl+Shift+Z`（Cmd 同理）或工具栏按钮；历史栈 80 步，覆盖添加/删除/拖动/属性/对齐/图片/尺寸 |
+| 多选 | `Shift`+点击（或 `Ctrl`/`Cmd`+点击）增减选中；`Ctrl+A` 全选；画布显示整体包围盒 |
+| 删除 / 复制 | `Delete` 删除选中；`Ctrl+D` 复制选中元素 |
+| 多选对齐 | 右侧「多选」面板 左/水平居中/右/顶/垂直居中/底对齐，基准为可打印区 4–29mm；工具栏「对齐」下拉同样可用 |
+| 等距分布 | 右侧「多选」面板 水平/垂直等距分布（≥2 个元素，基准可打印区） |
+| 图层顺序 | 属性面板「上移 / 下移 / 置顶 / 置底」 |
+| 复制粘贴 | `Ctrl+C` / `Ctrl+V`（应用内剪贴板，粘贴偏移 2mm，可连续粘贴） |
 | 修改参数 | 右侧属性面板（内容、字号、加粗、对齐、反白、条码符号/高度/文字、二维码尺寸） |
 | 打印机 | 点击状态栏「当前打印机 / 选择打印机」芯片 → 扫描 → 连接；选择会记在 localStorage |
 | 可打印区域 | 顶部 4mm / 底部 1mm 为硬件不可打印（浅红斜纹）；中间细线为 4–29mm 可打印区，越界仅黄色提醒 |
@@ -309,9 +320,9 @@ $ npm run build
 vite v7.3.8 building client environment for production...
 ✓ 23 modules transformed.
 dist/index.html                   1.07 kB │ gzip:  0.65 kB
-dist/assets/index-C-Eip_1u.css   27.10 kB │ gzip:  6.26 kB
-dist/assets/index-DmW46nRw.js   159.74 kB │ gzip: 57.65 kB
-✓ built in 684ms
+dist/assets/index-Bu7R6zLh.css   27.85 kB │ gzip:  6.41 kB
+dist/assets/index-Bwu5UQ5B.js   168.44 kB │ gzip: 60.49 kB
+✓ built in 797ms
 
 $ npm run dev        # VITE v7.3.8 ready → http://127.0.0.1:5173/
 $ curl -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/           # 200
@@ -319,6 +330,12 @@ $ curl -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/src/main.js # 200
 ```
 
 ### 9.2 浏览器实测（Playwright Chromium，1440 × 900）
+
+| 撤销/重做 | 添加元素 → 撤销数量 -1 → 重做恢复；拖动/属性改字号/标签宽 50mm/图片添加/对齐 均可用 Ctrl+Z 还原；连续添加 55 个后可撤销 55 步（历史栈 80） |
+| 多选 | Shift+点击两个元素 → 面板「多选 2」、整体包围盒出现；组拖拽 +3/+1mm 同步移动，撤销恢复；Ctrl+A 全选、Delete 删除全部、撤销恢复 |
+| 对齐/分布（可打印区基准） | 左对齐 x=0；顶对齐 y=4；底对齐底边=29；水平分布右缘=40；垂直分布从 4 到 29；工具栏对齐下拉多选同样生效 |
+| 图层 | 置顶后选中元素位于 DOM 最后（4/4），置底后位于 0，撤销恢复原顺序 |
+| 复制粘贴/微移 | Ctrl+C/V 复制元素偏移 +2mm；方向键 0.5mm、Shift 0.1mm；Ctrl+D 多选复制 2 个 |
 
 > 打印机设置（207/208）、打印请求与图片元素的 spec 组装均使用 mock 验证，**未触发真机写入/出纸**；连接、状态查询与预览为真机验证。
 
@@ -371,6 +388,7 @@ $ curl -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/src/main.js # 200
 - 打印机型号默认 M1；换机型时后端 `/api/models` 可扩展，前端会按 `/api/status` 返回的型号展示。
 - 打印机需先在系统蓝牙中配对一次；扫描依赖 BlueZ/bluetoothctl，连接可能因设备被占用（busy）失败，此时 UI 会直接展示后端 error 文案，重试即可。
 - 图片元素按原图比例或指定宽高缩放；如需满版请调整宽高或提供与标签同比例的图片（后续可增加裁剪选项）。图片 dataURL 会随 spec 传输（单图 ≤2MB、后端上限 16MB）。
+- 元素锁定 / 隐藏为可选需求，暂未实现（后续版本补充）。
 
 ## 11. 品牌与原创声明
 

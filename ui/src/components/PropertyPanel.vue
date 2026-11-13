@@ -11,8 +11,11 @@ import {
   printableZoneMm,
 } from '../label'
 import {
+  alignSelected,
   copySpecJson,
+  distributeSelected,
   duplicateItem,
+  moveLayer,
   removeItem,
   selectedItem,
   setPreset,
@@ -108,8 +111,36 @@ function onPresetChange(event) {
     <div class="panel-head">
       <h2>属性</h2>
       <span v-if="item" class="type-chip" :class="`type-chip--${item.type}`">{{ typeLabel }}</span>
+      <span v-else-if="state.selectedIds.length > 1" class="type-chip">多选 {{ state.selectedIds.length }}</span>
       <span v-else class="type-chip">标签</span>
     </div>
+
+    <!-- 多选：对齐 / 分布 / 图层 -->
+    <section v-if="!item && state.selectedIds.length > 1" class="prop-section">
+      <h3 class="section-title">多选（{{ state.selectedIds.length }} 个元素）</h3>
+      <p class="readout">对齐 / 分布基准：可打印区 4–29 mm（40×30）</p>
+      <div class="multi-grid">
+        <button class="btn btn-light btn--small" @click="alignSelected('left')">左对齐</button>
+        <button class="btn btn-light btn--small" @click="alignSelected('center')">水平居中</button>
+        <button class="btn btn-light btn--small" @click="alignSelected('right')">右对齐</button>
+        <button class="btn btn-light btn--small" @click="alignSelected('top')">顶对齐</button>
+        <button class="btn btn-light btn--small" @click="alignSelected('middle')">垂直居中</button>
+        <button class="btn btn-light btn--small" @click="alignSelected('bottom')">底对齐</button>
+      </div>
+      <div class="multi-grid multi-grid--two">
+        <button class="btn btn-light btn--small" @click="distributeSelected('horizontal')">水平等距分布</button>
+        <button class="btn btn-light btn--small" @click="distributeSelected('vertical')">垂直等距分布</button>
+      </div>
+      <div class="multi-grid">
+        <button class="btn btn-light btn--small" @click="moveLayer('up')">上移一层</button>
+        <button class="btn btn-light btn--small" @click="moveLayer('down')">下移一层</button>
+        <button class="btn btn-light btn--small" @click="moveLayer('front')">置顶</button>
+        <button class="btn btn-light btn--small" @click="moveLayer('back')">置底</button>
+      </div>
+      <p class="readout">
+        Shift + 点击可增减选择；Ctrl+A 全选；方向键 0.5mm（Shift 0.1mm）；Ctrl+C / Ctrl+V 复制粘贴。
+      </p>
+    </section>
 
     <!-- 选中元素 -->
     <section v-if="item" class="prop-section">
@@ -126,6 +157,14 @@ function onPresetChange(event) {
             <AppIcon name="trash" :size="15" />
           </button>
         </div>
+      </div>
+
+      <div class="layer-row">
+        <span class="layer-label">图层</span>
+        <button class="mini-btn" title="上移一层" @click="moveLayer('up')">上移</button>
+        <button class="mini-btn" title="下移一层" @click="moveLayer('down')">下移</button>
+        <button class="mini-btn" title="置顶" @click="moveLayer('front')">置顶</button>
+        <button class="mini-btn" title="置底" @click="moveLayer('back')">置底</button>
       </div>
 
       <div class="field-grid">

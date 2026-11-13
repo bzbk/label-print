@@ -159,8 +159,8 @@ button {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 5px 5px;
-  padding: 8px 13px;
+  gap: 3px 3px;
+  padding: 8px 12px;
   background: linear-gradient(180deg, var(--toolbar-from) 0%, var(--toolbar-to) 100%);
   color: #e8ecf4;
   border-bottom: 1px solid #10151f;
@@ -208,6 +208,19 @@ button {
 .toolbar-group {
   display: flex;
   gap: 2px;
+}
+
+.tool-btn--icon {
+  padding: 6px;
+}
+
+.tool-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.tool-btn:disabled:hover {
+  background: transparent;
 }
 
 .tool-btn {
@@ -748,6 +761,29 @@ kbd {
   white-space: nowrap;
 }
 
+/* 多选整体包围盒 */
+.selection-group-box {
+  position: absolute;
+  z-index: 55;
+  border: 2px dashed rgba(37, 99, 235, 0.85);
+  background: rgba(37, 99, 235, 0.045);
+  pointer-events: none;
+}
+
+.selection-group-tag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translateY(-100%);
+  padding: 1px 6px;
+  border-radius: 4px 4px 0 0;
+  background: rgba(37, 99, 235, 0.9);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
 /* 垂直微调提示：只在风险侧画虚线，不改网格/坐标 */
 .v-offset-hint {
   position: absolute;
@@ -1249,6 +1285,31 @@ kbd {
   font-size: 10.5px;
   line-height: 1.55;
   color: var(--ink-3);
+}
+
+.multi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.multi-grid--two {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.layer-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 10px;
+}
+
+.layer-label {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  letter-spacing: 0.06em;
 }
 
 .readout--note {

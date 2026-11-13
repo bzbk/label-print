@@ -12,13 +12,18 @@ import {
   clearSelection,
   closePreview,
   closePrinterDialog,
-  duplicateItem,
+  copySelected,
+  duplicateSelected,
   nudgeSelected,
+  pasteClipboard,
+  redo,
   refreshStatus,
-  removeItem,
+  removeSelected,
   saveJson,
+  selectAll,
   startStatusPolling,
   state,
+  undo,
 } from './stores/store'
 
 let stopPolling = null
@@ -29,27 +34,56 @@ function isTypingTarget(target) {
 }
 
 function onKeydown(event) {
-  if (isTypingTarget(event.target)) return
   const meta = event.ctrlKey || event.metaKey
+  const key = event.key
 
-  if (meta && (event.key === 'd' || event.key === 'D')) {
+  // 撤销/重做：即使在输入框内也优先应用级撤销（需求要求全局 Ctrl+Z）
+  if (meta && (key === 'z' || key === 'Z')) {
     event.preventDefault()
-    if (state.selectedId) duplicateItem(state.selectedId)
+    if (event.shiftKey) redo()
+    else undo()
     return
   }
-  if (meta && (event.key === 's' || event.key === 'S')) {
+  if (meta && (key === 'y' || key === 'Y')) {
+    event.preventDefault()
+    redo()
+    return
+  }
+
+  if (isTypingTarget(event.target)) return
+  if (meta && (key === 'a' || key === 'A')) {
+    event.preventDefault()
+    selectAll()
+    return
+  }
+  if (meta && (key === 'c' || key === 'C')) {
+    event.preventDefault()
+    copySelected()
+    return
+  }
+  if (meta && (key === 'v' || key === 'V')) {
+    event.preventDefault()
+    pasteClipboard()
+    return
+  }
+  if (meta && (key === 'd' || key === 'D')) {
+    event.preventDefault()
+    duplicateSelected()
+    return
+  }
+  if (meta && (key === 's' || key === 'S')) {
     event.preventDefault()
     saveJson()
     return
   }
-  if (event.key === 'Delete' || event.key === 'Backspace') {
-    if (state.selectedId) {
+  if (key === 'Delete' || key === 'Backspace') {
+    if (state.selectedIds.length) {
       event.preventDefault()
-      removeItem(state.selectedId)
+      removeSelected()
     }
     return
   }
-  if (event.key === 'Escape') {
+  if (key === 'Escape') {
     if (state.printerDialog.open) {
       closePrinterDialog()
       return
@@ -67,10 +101,11 @@ function onKeydown(event) {
     ArrowUp: [0, -1],
     ArrowDown: [0, 1],
   }
-  const delta = arrows[event.key]
-  if (delta && state.selectedId) {
+  const delta = arrows[key]
+  if (delta && state.selectedIds.length) {
     event.preventDefault()
-    const step = event.shiftKey ? 0.2 : 1
+    // 方向键 0.5mm，按住 Shift 0.1mm
+    const step = event.shiftKey ? 0.1 : 0.5
     nudgeSelected(delta[0] * step, delta[1] * step)
   }
 }

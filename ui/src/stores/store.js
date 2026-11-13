@@ -16,6 +16,7 @@ import {
   fromSpec,
   PRINT_ZONE_TOP_MM,
   itemBoxMm,
+  printableZoneMm,
   newId,
   normalizeItemPosition,
   snapOffsetX,
@@ -129,6 +130,13 @@ export const state = reactive({
   // 「新建」会得到空白标签。
   doc: templateDoc('material'),
   selectedId: null,
+  selectedIds: [],
+  /** 撤销/重做历史（JSON 快照，≥50 步） */
+  history: {
+    past: [],
+    future: [],
+    applying: false,
+  },
   /** 画布缩放：1 = 1 dot 渲染为 1 CSS px，默认略放大便于编辑 */
   zoom: 2.6,
   copies: 1,
@@ -187,9 +195,95 @@ export const state = reactive({
   toasts: [],
 })
 
-export const selectedItem = computed(
-  () => state.doc.items.find((item) => item.id === state.selectedId) || null,
-)
+export const selectedItems = computed(() => {
+  const ids = new Set(state.selectedIds)
+  return state.doc.items.filter((item) => ids.has(item.id))
+})
+
+/** 仅单选时返回元素（多选时属性面板显示批量操作） */
+export const selectedItem = computed(() => {
+  if (state.selectedIds.length !== 1) return null
+  const id = state.selectedIds[0]
+  return state.doc.items.find((item) => item.id === id) || null
+})
+
+export const selectedCount = computed(() => state.selectedIds.length)
+
+const HISTORY_LIMIT = 80
+let lastMarkKey = null
+let lastMarkAt = 0
+
+function snapshotHistory() {
+  return JSON.stringify({ doc: state.doc, selectedIds: state.selectedIds })
+}
+
+/** 所有会改变文档的操作在修改前调用；key 相同且 600ms 内合并为一步（如连续打字） */
+export function markHistory(key = null) {
+  if (state.history.applying) return
+  const now = Date.now()
+  if (key && key === lastMarkKey && now - lastMarkAt < 600) {
+    lastMarkAt = now
+    return
+  }
+  const snapshot = snapshotHistory()
+  const past = state.history.past
+  if (past.length && past[past.length - 1] === snapshot) {
+    lastMarkKey = key
+    lastMarkAt = now
+    return
+  }
+  past.push(snapshot)
+  if (past.length > HISTORY_LIMIT) past.splice(0, past.length - HISTORY_LIMIT)
+  state.history.future.length = 0
+  lastMarkKey = key
+  lastMarkAt = now
+}
+
+function applyHistorySnapshot(snapshot) {
+  let data
+  try {
+    data = JSON.parse(snapshot)
+  } catch {
+    return
+  }
+  if (!data || !data.doc || !Array.isArray(data.doc.items)) return
+  state.history.applying = true
+  try {
+    state.doc = data.doc
+    const ids = Array.isArray(data.selectedIds) ? data.selectedIds : []
+    state.selectedIds = ids.filter((id) => data.doc.items.some((item) => item.id === id))
+    state.selectedId = state.selectedIds[state.selectedIds.length - 1] || null
+  } finally {
+    state.history.applying = false
+    lastMarkKey = null
+    lastMarkAt = 0
+  }
+}
+
+export function undo() {
+  const past = state.history.past
+  if (!past.length) return
+  state.history.future.push(snapshotHistory())
+  applyHistorySnapshot(past.pop())
+}
+
+export function redo() {
+  const future = state.history.future
+  if (!future.length) return
+  state.history.past.push(snapshotHistory())
+  applyHistorySnapshot(future.pop())
+}
+
+export function resetHistory() {
+  state.history.past.length = 0
+  state.history.future.length = 0
+  state.history.applying = false
+  lastMarkKey = null
+  lastMarkAt = 0
+}
+
+export const canUndo = computed(() => state.history.past.length > 0)
+export const canRedo = computed(() => state.history.future.length > 0)
 
 export const spec = computed(() => toSpec(state.doc))
 export const specJson = computed(() => JSON.stringify(spec.value, null, 2))
@@ -248,22 +342,51 @@ export function dismissToast(id) {
 
 /* --------------------------------------------------------------- selection */
 
-export function selectItem(id) {
-  state.selectedId = id || null
+export function selectItem(id, additive = false) {
+  if (!id) {
+    clearSelection()
+    return
+  }
+  if (additive) {
+    const index = state.selectedIds.indexOf(id)
+    if (index >= 0) state.selectedIds.splice(index, 1)
+    else state.selectedIds.push(id)
+    state.selectedId = state.selectedIds[state.selectedIds.length - 1] || null
+    return
+  }
+  state.selectedIds = [id]
+  state.selectedId = id
+}
+
+export function toggleSelection(id) {
+  selectItem(id, true)
+}
+
+export function selectAll() {
+  state.selectedIds = state.doc.items.map((item) => item.id)
+  state.selectedId = state.selectedIds[state.selectedIds.length - 1] || null
 }
 
 export function clearSelection() {
+  state.selectedIds = []
   state.selectedId = null
+}
+
+function syncSelectionToDoc() {
+  const valid = new Set(state.doc.items.map((item) => item.id))
+  state.selectedIds = state.selectedIds.filter((id) => valid.has(id))
+  state.selectedId = state.selectedIds[state.selectedIds.length - 1] || null
 }
 
 /* ---------------------------------------------------------------- document */
 
 export function addItem(type) {
-  if (!TYPE_LABELS[type]) return null
+  if (!TYPE_LABELS[type] || type === 'image') return null
+  markHistory()
   const item = createItem(type, state.doc)
   autoPlaceItem(item, state.doc)
   state.doc.items.push(item)
-  state.selectedId = item.id
+  selectItem(item.id)
   showToast(`已添加${TYPE_LABELS[type]}元素`, 'success', 1600)
   return item
 }
@@ -271,26 +394,53 @@ export function addItem(type) {
 export function removeItem(id) {
   const index = state.doc.items.findIndex((item) => item.id === id)
   if (index < 0) return
+  markHistory()
   state.doc.items.splice(index, 1)
-  if (state.selectedId === id) state.selectedId = null
+  syncSelectionToDoc()
+}
+
+export function removeSelected() {
+  if (!state.selectedIds.length) return
+  markHistory()
+  const ids = new Set(state.selectedIds)
+  state.doc.items = state.doc.items.filter((item) => !ids.has(item.id))
+  clearSelection()
+}
+
+function cloneItem(item, offsetMm) {
+  const copy = JSON.parse(JSON.stringify(item))
+  copy.id = newId()
+  copy.x_mm = round1((Number(copy.x_mm) || 0) + offsetMm)
+  copy.y_mm = round1((Number(copy.y_mm) || 0) + offsetMm)
+  normalizeItemPosition(copy, state.doc)
+  return copy
 }
 
 export function duplicateItem(id) {
   const index = state.doc.items.findIndex((item) => item.id === id)
   if (index < 0) return
-  const copy = JSON.parse(JSON.stringify(state.doc.items[index]))
-  copy.id = newId()
-  copy.x_mm = round1((Number(copy.x_mm) || 0) + 1)
-  copy.y_mm = round1((Number(copy.y_mm) || 0) + 1)
-  normalizeItemPosition(copy, state.doc)
+  markHistory()
+  const copy = cloneItem(state.doc.items[index], 1)
   state.doc.items.splice(index + 1, 0, copy)
-  state.selectedId = copy.id
+  selectItem(copy.id)
   showToast('已复制元素', 'success', 1600)
+}
+
+export function duplicateSelected() {
+  const items = selectedItems.value
+  if (!items.length) return
+  markHistory()
+  const copies = items.map((item) => cloneItem(item, 1))
+  state.doc.items.push(...copies)
+  state.selectedIds = copies.map((copy) => copy.id)
+  state.selectedId = state.selectedIds[state.selectedIds.length - 1]
+  showToast(`已复制 ${copies.length} 个元素`, 'success', 1600)
 }
 
 export function updateItem(id, patch) {
   const item = state.doc.items.find((entry) => entry.id === id)
   if (!item) return null
+  markHistory(`item:${id}:${Object.keys(patch).sort().join(',')}`)
   const touchesPosition = 'x_mm' in patch || 'y_mm' in patch
   Object.assign(item, patch)
   clampItemFields(item)
@@ -298,7 +448,7 @@ export function updateItem(id, patch) {
   return item
 }
 
-/** 拖拽时直接写入 mm 坐标（已在画布侧做 1mm 吸附与边界约束） */
+/** 拖拽时直接写入 mm 坐标（画布侧已做吸附与边界约束；历史由画布在拖动开始时记录） */
 export function moveItem(id, x_mm, y_mm) {
   const item = state.doc.items.find((entry) => entry.id === id)
   if (!item) return
@@ -306,13 +456,30 @@ export function moveItem(id, x_mm, y_mm) {
   item.y_mm = round1(y_mm)
 }
 
+/** 方向键微移：多选时整体移动并做组边界约束 */
 export function nudgeSelected(dxMm, dyMm) {
-  const item = selectedItem.value
-  if (!item) return
-  updateItem(item.id, {
-    x_mm: round1((Number(item.x_mm) || 0) + dxMm),
-    y_mm: round1((Number(item.y_mm) || 0) + dyMm),
-  })
+  const items = selectedItems.value
+  if (!items.length) return
+  markHistory('nudge')
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const item of items) {
+    const box = itemBoxMm(item, state.doc)
+    const x = Number(item.x_mm) || 0
+    const y = Number(item.y_mm) || 0
+    minX = Math.min(minX, x)
+    minY = Math.min(minY, y)
+    maxX = Math.max(maxX, x + box.w_mm)
+    maxY = Math.max(maxY, y + box.h_mm)
+  }
+  const dx = clamp(dxMm, -minX, Math.max(-minX, state.doc.width_mm - maxX))
+  const dy = clamp(dyMm, -minY, Math.max(-minY, state.doc.height_mm - maxY))
+  for (const item of items) {
+    item.x_mm = round1((Number(item.x_mm) || 0) + dx)
+    item.y_mm = round1((Number(item.y_mm) || 0) + dy)
+  }
 }
 
 const ALIGN_LABELS = {
@@ -324,24 +491,116 @@ const ALIGN_LABELS = {
   bottom: '下对齐',
 }
 
+/** 以「可打印区域」为基准对齐所有选中元素 */
 export function alignSelected(mode) {
-  const item = selectedItem.value
-  if (!item || !ALIGN_LABELS[mode]) return
-  const box = itemBoxMm(item, state.doc)
+  const items = selectedItems.value
+  if (!items.length || !ALIGN_LABELS[mode]) return
+  markHistory()
+  const zone = printableZoneMm(state.doc)
   const width = state.doc.width_mm
-  const height = state.doc.height_mm
-  const patch = {}
-  if (mode === 'left') patch.x_mm = 0
-  if (mode === 'center') patch.x_mm = round1(Math.max(0, (width - box.w_mm) / 2))
-  if (mode === 'right') patch.x_mm = round1(Math.max(0, width - box.w_mm))
-  if (mode === 'top') patch.y_mm = 0
-  if (mode === 'middle') patch.y_mm = round1(Math.max(0, (height - box.h_mm) / 2))
-  if (mode === 'bottom') patch.y_mm = round1(Math.max(0, height - box.h_mm))
-  updateItem(item.id, patch)
-  showToast(`已${ALIGN_LABELS[mode]}`, 'info', 1500)
+  for (const item of items) {
+    const box = itemBoxMm(item, state.doc)
+    if (mode === 'left') item.x_mm = 0
+    if (mode === 'center') item.x_mm = round1(Math.max(0, (width - box.w_mm) / 2))
+    if (mode === 'right') item.x_mm = round1(Math.max(0, width - box.w_mm))
+    if (mode === 'top') item.y_mm = zone.topMm
+    if (mode === 'middle') {
+      item.y_mm = round1(zone.topMm + Math.max(0, (zone.heightMm - box.h_mm) / 2))
+    }
+    if (mode === 'bottom') {
+      item.y_mm = round1(Math.max(0, zone.bottomMm - box.h_mm))
+    }
+  }
+  showToast(`已${ALIGN_LABELS[mode]}（${items.length} 个元素）`, 'info', 1500)
+}
+
+/** 以可打印区域为基准做等距分布（需 ≥2 个选中元素） */
+export function distributeSelected(axis = 'horizontal') {
+  const items = selectedItems.value
+  if (items.length < 2) {
+    showToast('请至少选择 2 个元素', 'warn', 2500)
+    return
+  }
+  markHistory()
+  const zone = printableZoneMm(state.doc)
+  if (axis === 'vertical') {
+    const sorted = [...items].sort((a, b) => (Number(a.y_mm) || 0) - (Number(b.y_mm) || 0))
+    const total = sorted.reduce((sum, item) => sum + itemBoxMm(item, state.doc).h_mm, 0)
+    const gap = Math.max(0, (zone.heightMm - total) / (sorted.length - 1))
+    let cursor = zone.topMm
+    for (const item of sorted) {
+      item.y_mm = round1(cursor)
+      cursor += itemBoxMm(item, state.doc).h_mm + gap
+    }
+  } else {
+    const sorted = [...items].sort((a, b) => (Number(a.x_mm) || 0) - (Number(b.x_mm) || 0))
+    const total = sorted.reduce((sum, item) => sum + itemBoxMm(item, state.doc).w_mm, 0)
+    const gap = Math.max(0, (state.doc.width_mm - total) / (sorted.length - 1))
+    let cursor = 0
+    for (const item of sorted) {
+      item.x_mm = round1(cursor)
+      cursor += itemBoxMm(item, state.doc).w_mm + gap
+    }
+  }
+  showToast(`已${axis === 'vertical' ? '垂直' : '水平'}等距分布`, 'info', 1600)
+}
+
+/** 图层顺序：up / down / front / back */
+export function moveLayer(mode) {
+  const selected = new Set(state.selectedIds)
+  if (!selected.size) return
+  const items = state.doc.items
+  markHistory()
+  if (mode === 'front' || mode === 'back') {
+    const picked = items.filter((item) => selected.has(item.id))
+    const rest = items.filter((item) => !selected.has(item.id))
+    state.doc.items = mode === 'front' ? [...rest, ...picked] : [...picked, ...rest]
+  } else if (mode === 'up') {
+    for (let index = items.length - 2; index >= 0; index -= 1) {
+      if (selected.has(items[index].id) && !selected.has(items[index + 1].id)) {
+        ;[items[index], items[index + 1]] = [items[index + 1], items[index]]
+      }
+    }
+  } else if (mode === 'down') {
+    for (let index = 1; index < items.length; index += 1) {
+      if (selected.has(items[index].id) && !selected.has(items[index - 1].id)) {
+        ;[items[index], items[index - 1]] = [items[index - 1], items[index]]
+      }
+    }
+  } else {
+    return
+  }
+  const labels = { up: '上移一层', down: '下移一层', front: '置顶', back: '置底' }
+  showToast(`图层已${labels[mode]}`, 'info', 1400)
+}
+
+/* --------------------------------------------------------- 剪贴板 */
+
+let clipboardItems = []
+let clipboardPasteCount = 0
+
+export function copySelected() {
+  const items = selectedItems.value
+  if (!items.length) return
+  clipboardItems = items.map((item) => JSON.parse(JSON.stringify(item)))
+  clipboardPasteCount = 0
+  showToast(`已复制 ${items.length} 个元素`, 'info', 1600)
+}
+
+export function pasteClipboard() {
+  if (!clipboardItems.length) return
+  clipboardPasteCount += 1
+  const offset = 2 * clipboardPasteCount
+  markHistory()
+  const copies = clipboardItems.map((item) => cloneItem(item, offset))
+  state.doc.items.push(...copies)
+  state.selectedIds = copies.map((copy) => copy.id)
+  state.selectedId = state.selectedIds[state.selectedIds.length - 1]
+  showToast(`已粘贴 ${copies.length} 个元素`, 'success', 1800)
 }
 
 export function updateDoc(patch) {
+  markHistory(`doc:${Object.keys(patch).sort().join(',')}`)
   const doc = state.doc
   if ('name' in patch) doc.name = String(patch.name ?? '')
   if ('width_mm' in patch) {
@@ -361,9 +620,7 @@ export function updateDoc(patch) {
     doc.density = DENSITIES.includes(Number(patch.density)) ? Number(patch.density) : 75
   }
   for (const item of doc.items) normalizeItemPosition(item, doc)
-  if (state.selectedId && !doc.items.some((item) => item.id === state.selectedId)) {
-    state.selectedId = null
-  }
+  syncSelectionToDoc()
   return doc
 }
 
@@ -381,13 +638,15 @@ export function setPreset(preset) {
 
 export function newDoc() {
   state.doc = createDoc()
-  state.selectedId = null
+  clearSelection()
+  resetHistory()
   showToast('已新建空白标签（40 × 30 mm）')
 }
 
 export function applyTemplate(name) {
   state.doc = templateDoc(name)
-  state.selectedId = null
+  clearSelection()
+  resetHistory()
   showToast(`已载入模板：${state.doc.name}`, 'success', 2400)
 }
 
@@ -395,7 +654,8 @@ export function loadSpec(raw, options = {}) {
   const doc = fromSpec(raw)
   if (options.name) doc.name = String(options.name)
   state.doc = doc
-  state.selectedId = null
+  clearSelection()
+  resetHistory()
   hydrateImageItems(doc)
   showToast(`已打开标签「${doc.name}」（${doc.width_mm} × ${doc.height_mm} mm）`, 'success', 2600)
   return doc
@@ -980,8 +1240,9 @@ export async function addImageElementFromFile(file) {
       y_mm: PRINT_ZONE_TOP_MM,
     })
     normalizeItemPosition(item, state.doc)
+    markHistory()
     state.doc.items.push(item)
-    state.selectedId = item.id
+    selectItem(item.id)
     showToast(
       `已添加图片元素（${prepared.width}×${prepared.height}px）`,
       'success',

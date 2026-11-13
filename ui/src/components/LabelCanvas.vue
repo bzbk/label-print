@@ -4,7 +4,7 @@ import AppIcon from './AppIcon.vue'
 import LabelElement from './LabelElement.vue'
 import { itemBoxMm, printableZoneMm } from '../label'
 import { DOT_PER_MM, clamp, round1 } from '../units'
-import { clearSelection, selectItem, state } from '../stores/store'
+import { clearSelection, markHistory, selectItem, state } from '../stores/store'
 
 const doc = computed(() => state.doc)
 const zoom = computed(() => state.zoom)
@@ -12,6 +12,35 @@ const zoom = computed(() => state.zoom)
 const scrollEl = ref(null)
 const dragState = ref(null)
 let resizeTimer = null
+
+/** 多选整体包围盒（仅显示，不参与拖拽命中） */
+const groupSelectionBox = computed(() => {
+  if (state.selectedIds.length < 2) return null
+  const selected = state.doc.items.filter((item) => state.selectedIds.includes(item.id))
+  if (!selected.length) return null
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const item of selected) {
+    const box = itemBoxMm(item, state.doc)
+    const x = Number(item.x_mm) || 0
+    const y = Number(item.y_mm) || 0
+    minX = Math.min(minX, x)
+    minY = Math.min(minY, y)
+    maxX = Math.max(maxX, x + box.w_mm)
+    maxY = Math.max(maxY, y + box.h_mm)
+  }
+  const px = (mm) => mm * DOT_PER_MM * zoom.value
+  return {
+    // label-region 本身已包含纸卷偏移，组包围盒坐标不再叠加 offset
+    left: `${px(minX)}px`,
+    top: `${px(minY)}px`,
+    width: `${px(maxX - minX)}px`,
+    height: `${px(maxY - minY)}px`,
+    count: selected.length,
+  }
+})
 
 /** 纸卷偏移：40mm 卷纸在 50mm 纸仓中相对打印头原点右移 10mm；内容从偏移线之后开始 */
 const offsetMm = computed(() => Number(doc.value.offset_x_mm) || 0)
@@ -118,16 +147,47 @@ function onItemPointerDown(event, item) {
   if (event.button !== 0) return
   event.preventDefault()
   event.stopPropagation()
-  selectItem(item.id)
-  const box = itemBoxMm(item, state.doc)
+
+  // Shift / Ctrl / Cmd + 点击：多选切换（不启动拖拽）
+  const additive = event.shiftKey || event.metaKey || event.ctrlKey
+  if (additive) {
+    selectItem(item.id, true)
+    return
+  }
+
+  if (!state.selectedIds.includes(item.id)) selectItem(item.id)
+  const ids = state.selectedIds.slice()
+  const targets = state.doc.items
+    .filter((entry) => ids.includes(entry.id))
+    .map((entry) => ({
+      id: entry.id,
+      startX: Number(entry.x_mm) || 0,
+      startY: Number(entry.y_mm) || 0,
+      box: itemBoxMm(entry, state.doc),
+    }))
+  if (!targets.length) return
+
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const target of targets) {
+    minX = Math.min(minX, target.startX)
+    minY = Math.min(minY, target.startY)
+    maxX = Math.max(maxX, target.startX + target.box.w_mm)
+    maxY = Math.max(maxY, target.startY + target.box.h_mm)
+  }
+
   dragState.value = {
-    id: item.id,
+    targets,
     startClientX: event.clientX,
     startClientY: event.clientY,
-    startX: Number(item.x_mm) || 0,
-    startY: Number(item.y_mm) || 0,
-    maxX: Math.max(0, round1(state.doc.width_mm - Math.min(box.w_mm, state.doc.width_mm))),
-    maxY: Math.max(0, round1(state.doc.height_mm - Math.min(box.h_mm, state.doc.height_mm))),
+    sessionId: Date.now(),
+    minDeltaX: -minX,
+    maxDeltaX: state.doc.width_mm - maxX,
+    minDeltaY: -minY,
+    maxDeltaY: state.doc.height_mm - maxY,
+    moved: false,
   }
   window.addEventListener('pointermove', onPointerMove)
   window.addEventListener('pointerup', stopDrag, { once: true })
@@ -139,14 +199,23 @@ function onPointerMove(event) {
   if (!drag) return
   const dxMm = (event.clientX - drag.startClientX) / (DOT_PER_MM * state.zoom)
   const dyMm = (event.clientY - drag.startClientY) / (DOT_PER_MM * state.zoom)
-  const item = state.doc.items.find((entry) => entry.id === drag.id)
-  if (!item) return
   // 默认吸附 1mm 网格；按住 Shift 时精细到 0.1mm
   const step = event.shiftKey ? 0.1 : 1
-  const nextX = Math.round((drag.startX + dxMm) / step) * step
-  const nextY = Math.round((drag.startY + dyMm) / step) * step
-  item.x_mm = clamp(round1(nextX), 0, drag.maxX)
-  item.y_mm = clamp(round1(nextY), 0, drag.maxY)
+  let dx = Math.round(dxMm / step) * step
+  let dy = Math.round(dyMm / step) * step
+  // 整组约束在标签范围内（若元素原始就超界，则允许反向移动）
+  dx = clamp(dx, Math.min(drag.minDeltaX, drag.maxDeltaX), Math.max(drag.minDeltaX, drag.maxDeltaX))
+  dy = clamp(dy, Math.min(drag.minDeltaY, drag.maxDeltaY), Math.max(drag.minDeltaY, drag.maxDeltaY))
+  if (!drag.moved) {
+    drag.moved = true
+    markHistory(`drag:${drag.sessionId}`)
+  }
+  for (const target of drag.targets) {
+    const entry = state.doc.items.find((item) => item.id === target.id)
+    if (!entry) continue
+    entry.x_mm = round1(target.startX + dx)
+    entry.y_mm = round1(target.startY + dy)
+  }
 }
 
 function stopDrag() {
@@ -272,7 +341,7 @@ onBeforeUnmount(() => {
                 :doc="doc"
                 :zoom="zoom"
                 :index="index"
-                :selected="item.id === state.selectedId"
+                :selected="state.selectedIds.includes(item.id)"
                 @pointerdown="onItemPointerDown($event, item)"
               />
 
@@ -296,6 +365,10 @@ onBeforeUnmount(() => {
                 <span class="v-offset-tag">
                   内容{{ offsetY > 0 ? '下移' : '上移' }} {{ absOffsetY }} mm · {{ offsetY > 0 ? '底部' : '顶部' }}可能被裁切
                 </span>
+              </div>
+
+              <div v-if="groupSelectionBox" class="selection-group-box" :style="groupSelectionBox">
+                <span class="selection-group-tag">已选 {{ groupSelectionBox.count }} 个元素</span>
               </div>
 
               <div

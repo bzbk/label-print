@@ -106,7 +106,8 @@ function toggleBorder(event) {
       <ul>
         <li>拖动元素移动，自动吸附 1 mm 网格</li>
         <li><kbd>Delete</kbd> 删除 · <kbd>Ctrl</kbd>+<kbd>D</kbd> 复制</li>
-        <li>方向键微调，<kbd>Shift</kbd> 改为 0.2 mm</li>
+        <li>方向键微调 0.5 mm，<kbd>Shift</kbd> 改为 0.1 mm</li>
+        <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> 撤销 · <kbd>Ctrl</kbd>+<kbd>A</kbd> 全选 · Shift 点选多选</li>
       </ul>
     </div>
   </aside>

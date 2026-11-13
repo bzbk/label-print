@@ -4,13 +4,17 @@ import AppIcon from './AppIcon.vue'
 import { DENSITIES, LABEL_PRESETS } from '../label'
 import {
   alignSelected,
+  canRedo,
+  canUndo,
   newDoc,
   openJsonFile,
   openPreview,
   printLabel,
+  redo,
   saveJson,
   setPreset,
   state,
+  undo,
   updateDoc,
 } from '../stores/store'
 
@@ -82,11 +86,11 @@ function onTrimChange(event) {
       </button>
       <button class="tool-btn" title="打开本地 spec JSON" @click="triggerOpen">
         <AppIcon name="open" :size="15" />
-        <span>打开 JSON</span>
+        <span>打开</span>
       </button>
       <button class="tool-btn" title="导出 spec JSON（Ctrl+S）" @click="saveJson()">
         <AppIcon name="save" :size="15" />
-        <span>保存 JSON</span>
+        <span>保存</span>
       </button>
       <input
         ref="fileInput"
@@ -95,6 +99,25 @@ function onTrimChange(event) {
         accept=".json,application/json"
         @change="onFileChange"
       />
+    </div>
+
+    <div class="toolbar-group toolbar-group--history">
+      <button
+        class="tool-btn tool-btn--icon"
+        title="撤销（Ctrl+Z / Cmd+Z）"
+        :disabled="!canUndo"
+        @click="undo()"
+      >
+        <AppIcon name="undo" :size="16" />
+      </button>
+      <button
+        class="tool-btn tool-btn--icon"
+        title="重做（Ctrl+Shift+Z / Cmd+Shift+Z）"
+        :disabled="!canRedo"
+        @click="redo()"
+      >
+        <AppIcon name="redo" :size="16" />
+      </button>
     </div>
 
     <span class="toolbar-sep" aria-hidden="true"></span>
@@ -186,17 +209,17 @@ function onTrimChange(event) {
       <span>对齐</span>
       <select
         v-model="alignChoice"
-        :disabled="!state.selectedId"
-        :title="state.selectedId ? '相对标签画布对齐所选元素' : '请先选中一个元素'"
+        :disabled="state.selectedIds.length === 0"
+        :title="state.selectedIds.length ? '以可打印区域（4–29mm）为基准对齐选中元素' : '请先选择元素'"
         @change="onAlignChange"
       >
         <option value="">选择…</option>
         <option value="left">左对齐</option>
         <option value="center">水平居中</option>
         <option value="right">右对齐</option>
-        <option value="top">上对齐</option>
+        <option value="top">顶对齐（4mm）</option>
         <option value="middle">垂直居中</option>
-        <option value="bottom">下对齐</option>
+        <option value="bottom">底对齐（29mm）</option>
       </select>
     </label>
 

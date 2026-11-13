@@ -55,9 +55,19 @@ def print_image(png_path: str, addr: str, width_mm=40, height_mm=30, offset_x_mm
     data = open(png_path, "rb").read()
     q = (f"?width_mm={width_mm}&height_mm={height_mm}&offset_x_mm={offset_x_mm}"
          f"&copies=1&density=75&addr={addr}")
-    req = urllib.request.Request(LABEL_API + "/api/print/image" + q, data=data,
-                                 headers={"Content-Type": "image/png"})
-    return json.loads(urllib.request.urlopen(req, timeout=120).read().decode())
+    import time
+    last: dict = {}
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(LABEL_API + "/api/print/image" + q, data=data,
+                                         headers={"Content-Type": "image/png"})
+            last = json.loads(urllib.request.urlopen(req, timeout=120).read().decode())
+            if last.get("ok"):
+                return last
+        except Exception as exc:  # noqa: BLE001
+            last = {"ok": False, "error": str(exc)}
+        time.sleep(2 + attempt * 2)   # 蓝牙链路偶尔断开，等待重连
+    return last
 
 
 def main() -> int:

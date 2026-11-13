@@ -14,6 +14,7 @@ import {
   createDoc,
   createItem,
   fromSpec,
+  PRINT_ZONE_TOP_MM,
   itemBoxMm,
   newId,
   normalizeItemPosition,
@@ -24,7 +25,7 @@ import {
   toSpec,
 } from '../label'
 import { clamp, round1 } from '../units'
-import { prepareImageForPrint } from '../imagePrint'
+import { prepareImageElementFile } from '../imageElement'
 
 const MAX_TOASTS = 4
 let toastSeq = 0
@@ -166,24 +167,8 @@ export const state = reactive({
     error: '',
     lastWrittenAt: 0,
   },
-  /** 导入图片 / SVG 打印 */
-  imagePrint: {
-    open: false,
-    processing: false,
-    printing: false,
-    fileName: '',
-    kind: '',
-    previewUrl: '',
-    uploadBlob: null,
-    uploadName: '',
-    widthMm: 0,
-    heightMm: 0,
-    offsetMm: 0,
-    fullWidthPx: 0,
-    labelWidthPx: 0,
-    labelHeightPx: 0,
-    error: '',
-  },
+  /** 图片元素处理中（文件读取/栅格化/压缩） */
+  imageProcessing: false,
   /** 打印机扫描/选择弹窗 */
   printerDialog: {
     open: false,
@@ -208,6 +193,18 @@ export const selectedItem = computed(
 
 export const spec = computed(() => toSpec(state.doc))
 export const specJson = computed(() => JSON.stringify(spec.value, null, 2))
+
+/** 属性面板展示用：图片 src 只显示前 160 字符（复制/导出仍是完整 dataURL） */
+export const specJsonShort = computed(() => {
+  const copy = JSON.parse(JSON.stringify(spec.value))
+  for (const item of copy.items || []) {
+    if (item.type === 'image' && typeof item.src === 'string' && item.src.length > 160) {
+      const omitted = item.src.length - 160
+      item.src = `${item.src.slice(0, 160)}…（省略 ${omitted} 字符；复制/导出时包含完整 dataURL）`
+    }
+  }
+  return JSON.stringify(copy, null, 2)
+})
 
 /** 当前打印机连接状态：未选 / 连接中 / 已连接 / 离线 */
 export const printerConnection = computed(() => {
@@ -399,6 +396,7 @@ export function loadSpec(raw, options = {}) {
   if (options.name) doc.name = String(options.name)
   state.doc = doc
   state.selectedId = null
+  hydrateImageItems(doc)
   showToast(`已打开标签「${doc.name}」（${doc.width_mm} × ${doc.height_mm} mm）`, 'success', 2600)
   return doc
 }
@@ -941,92 +939,60 @@ export function closePreview() {
   state.preview.error = ''
 }
 
-/* ------------------------------------------------------- 导入图片 / SVG 打印 */
+/* --------------------------------------------------- 图片元素（参与排版） */
 
-/**
- * 处理用户选择的 PNG / JPG / SVG：
- * - SVG（以及其他图片）在浏览器端栅格化为「标签区域」PNG；
- * - 预览使用包含纸卷偏移的最终位图（offset+width 宽）；
- * - 打开确认弹窗，用户点「打印图片」后才上传。
- */
-export async function processImageFile(file) {
-  if (!file) return false
-  if (!ensurePrinterSelected()) return false
-  const imagePrint = state.imagePrint
-  imagePrint.processing = true
-  imagePrint.error = ''
-  try {
-    const result = await prepareImageForPrint(file, {
-      widthMm: state.doc.width_mm,
-      heightMm: state.doc.height_mm,
-      offsetMm: state.doc.offset_x_mm,
-    })
-    imagePrint.fileName = file.name || 'image'
-    imagePrint.kind = result.kind
-    imagePrint.previewUrl = result.previewDataUrl
-    imagePrint.uploadBlob = result.uploadBlob
-    imagePrint.uploadName = result.uploadName
-    imagePrint.widthMm = state.doc.width_mm
-    imagePrint.heightMm = state.doc.height_mm
-    imagePrint.offsetMm = Number(state.doc.offset_x_mm) || 0
-    imagePrint.fullWidthPx = result.fullW
-    imagePrint.labelWidthPx = result.labelW
-    imagePrint.labelHeightPx = result.labelH
-    imagePrint.open = true
-    imagePrint.printing = false
-    return true
-  } catch (error) {
-    showToast(`图片处理失败：${error.message || error}`, 'error', 6500)
-    return false
-  } finally {
-    imagePrint.processing = false
+/** 从 spec/JSON 载入的图片元素：异步探测原图尺寸，用于「高度留空=等比」 */
+function hydrateImageItem(item) {
+  if (!item || item.type !== 'image' || !item.src) return
+  if (Number(item.naturalWidth) > 0 && Number(item.naturalHeight) > 0) return
+  const image = new Image()
+  image.onload = () => {
+    item.naturalWidth = image.naturalWidth || image.width || 0
+    item.naturalHeight = image.naturalHeight || image.height || 0
+    normalizeItemPosition(item, state.doc)
+  }
+  image.src = item.src
+}
+
+function hydrateImageItems(doc) {
+  for (const item of doc.items || []) {
+    if (item.type === 'image') hydrateImageItem(item)
   }
 }
 
-export function closeImagePrint() {
-  state.imagePrint.open = false
-  state.imagePrint.error = ''
-}
-
-/** POST /api/print/image — 上传处理好的 PNG 打印；成功后关闭确认弹窗 */
-export async function printCurrentImage() {
-  const imagePrint = state.imagePrint
-  if (!imagePrint.uploadBlob || imagePrint.printing) return
-  if (!ensurePrinterSelected()) return
-  imagePrint.printing = true
-  imagePrint.error = ''
+/**
+ * 添加「图片」元素：PNG/JPG/SVG → dataURL（SVG 栅格化、大图压缩）→ 画布元素。
+ * 默认放在可打印区内（y=4），宽 20mm，高度留空（按原图比例）。
+ */
+export async function addImageElementFromFile(file) {
+  if (!file || state.imageProcessing) return null
+  state.imageProcessing = true
   try {
-    const result = await api.printImage(imagePrint.uploadBlob, {
-      width_mm: state.doc.width_mm,
-      height_mm: state.doc.height_mm,
-      offset_x_mm: state.doc.offset_x_mm,
-      copies: Math.max(1, Math.min(99, Number(state.copies) || 1)),
-      density: state.doc.density,
-      align: state.doc.align,
-      addr: state.printer.addr,
+    const prepared = await prepareImageElementFile(file)
+    const item = createItem('image', state.doc, {
+      src: prepared.dataUrl,
+      width_mm: 20,
+      height_mm: null,
+      align: 'left',
+      naturalWidth: prepared.width,
+      naturalHeight: prepared.height,
+      x_mm: 2,
+      y_mm: PRINT_ZONE_TOP_MM,
     })
-    if (!result || result.ok === false) {
-      throw new Error(
-        firstString(
-          result?.error,
-          Array.isArray(result?.errors) ? result.errors.join('、') : '',
-          result?.message,
-        ) || '图片打印失败',
-      )
-    }
+    normalizeItemPosition(item, state.doc)
+    state.doc.items.push(item)
+    state.selectedId = item.id
     showToast(
-      `图片打印任务已发送${result.status ? `：${result.status}` : ''}`,
+      `已添加图片元素（${prepared.width}×${prepared.height}px）`,
       'success',
-      4000,
+      3000,
     )
-    closeImagePrint()
-    window.setTimeout(() => refreshStatus(), 1500)
+    return item
   } catch (error) {
-    imagePrint.error = error.message || String(error)
-    showToast(`图片打印失败：${imagePrint.error}`, 'error', 7000)
-    markBackendOffline(error)
+    showToast(`图片处理失败：${error.message || error}`, 'error', 6500)
+    return null
   } finally {
-    imagePrint.printing = false
+    state.imageProcessing = false
   }
 }
 

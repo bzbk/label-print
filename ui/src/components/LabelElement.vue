@@ -226,6 +226,15 @@ const qrModules = computed(() => {
       </div>
     </div>
 
+    <!-- 图片元素：dataURL 直接渲染，随 spec 发给服务端按 mm 缩放 -->
+    <img
+      v-else-if="item.type === 'image' && item.src"
+      class="label-image"
+      :src="item.src"
+      alt=""
+      draggable="false"
+    />
+
     <!-- 二维码：SVG 示意占位（非可扫描编码，真实二维码由后端 zint 生成） -->
     <div v-else-if="item.type === 'qr'" class="qr-box">
       <span class="element-tag" :style="tagStyle">QR</span>

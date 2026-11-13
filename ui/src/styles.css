@@ -382,6 +382,12 @@ button {
   transform: translateY(0);
 }
 
+.palette-card:disabled {
+  opacity: 0.6;
+  cursor: wait;
+  transform: none;
+}
+
 .palette-card--template {
   background: #fbfcfe;
 }
@@ -912,6 +918,20 @@ kbd {
   background: #111;
 }
 
+.label-element--image {
+  overflow: hidden;
+  background: #fff;
+}
+
+.label-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
 .label-text {
   width: 100%;
   height: 100%;
@@ -1059,6 +1079,34 @@ kbd {
 .type-chip--qr {
   background: #f3ecfd;
   color: #6b3fa0;
+}
+
+.type-chip--image {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.image-element-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 84px;
+  margin-bottom: 10px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.image-element-preview img {
+  max-width: 100%;
+  max-height: 120px;
+  object-fit: contain;
+}
+
+.image-element-empty {
+  color: var(--ink-3);
+  font-size: 11.5px;
 }
 
 .prop-section {
@@ -1783,64 +1831,6 @@ kbd {
 .printer-empty-hint {
   font-size: 11px;
   color: #a2abbb;
-}
-
-/* 导入图片 / SVG 打印确认弹窗 */
-
-.image-print-modal {
-  width: min(700px, 94vw);
-}
-
-.image-print-body {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  max-height: 64vh;
-  padding: 16px 18px;
-  overflow: auto;
-  background: #f6f7fa;
-}
-
-.image-print-figure {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  width: 100%;
-}
-
-.image-print-figure .preview-img {
-  max-height: 42vh;
-}
-
-.image-print-figure figcaption {
-  font-size: 11px;
-  color: var(--ink-3);
-  text-align: center;
-}
-
-.image-print-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
-  width: 100%;
-  font-size: 11.5px;
-  color: var(--ink-3);
-}
-
-.image-print-meta strong {
-  font-weight: 600;
-  color: var(--ink-2);
-}
-
-.image-print-note {
-  width: 100%;
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.55;
-  color: var(--ink-3);
 }
 
 /* 打印机设置（写入设备 207/208） */

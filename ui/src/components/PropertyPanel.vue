@@ -16,7 +16,7 @@ import {
   removeItem,
   selectedItem,
   setPreset,
-  specJson,
+  specJsonShort,
   state,
   updateDoc,
   updateItem,
@@ -69,6 +69,23 @@ const trimWarning = computed(() =>
 
 function fmt(value) {
   return (Math.round(Number(value) * 10) / 10).toFixed(1)
+}
+
+function onImageHeightChange(event) {
+  const value = event.target.value
+  if (value === '' || value === null) {
+    patchItem({ height_mm: null })
+    return
+  }
+  patchItem({ height_mm: numberValue(event, 20) })
+}
+
+function toggleImageAutoHeight(event) {
+  if (event.target.checked) {
+    patchItem({ height_mm: null })
+  } else {
+    patchItem({ height_mm: box.value?.h_mm || 20 })
+  }
 }
 
 function patchItem(patch) {
@@ -215,6 +232,65 @@ function onPresetChange(event) {
         </label>
         <p class="readout">
           示意宽约 {{ box.w_mm }} mm。实际条码由服务端生成，宽度以预览为准。
+        </p>
+      </template>
+
+      <!-- 图片 -->
+      <template v-else-if="item.type === 'image'">
+        <div class="image-element-preview">
+          <img v-if="item.src" :src="item.src" alt="图片元素预览" />
+          <span v-else class="image-element-empty">图片数据为空</span>
+        </div>
+        <div class="field-grid">
+          <label class="field">
+            宽度（mm）
+            <input
+              type="number"
+              min="1"
+              max="72"
+              step="0.5"
+              :value="item.width_mm"
+              @change="patchItem({ width_mm: numberValue($event, item.width_mm) })"
+            />
+          </label>
+          <label class="field">
+            高度（mm）
+            <input
+              type="number"
+              min="1"
+              max="300"
+              step="0.5"
+              :value="item.height_mm ?? ''"
+              placeholder="留空 = 等比"
+              @change="onImageHeightChange"
+            />
+          </label>
+        </div>
+        <div class="field-grid">
+          <label class="field">
+            对齐
+            <span class="segmented">
+              <button :class="{ on: item.align === 'left' }" title="左对齐" @click="patchItem({ align: 'left' })">左</button>
+              <button :class="{ on: item.align === 'center' }" title="居中" @click="patchItem({ align: 'center' })">中</button>
+              <button :class="{ on: item.align === 'right' }" title="右对齐" @click="patchItem({ align: 'right' })">右</button>
+            </span>
+          </label>
+          <label class="field">
+            高度模式
+            <span class="check-row check-row--boxed">
+              <input
+                type="checkbox"
+                :checked="item.height_mm == null"
+                @change="toggleImageAutoHeight"
+              />
+              <span>{{ item.height_mm == null ? '等比（自动）' : '固定高度' }}</span>
+            </span>
+          </label>
+        </div>
+        <p class="readout">
+          原图 {{ item.naturalWidth || '?' }} × {{ item.naturalHeight || '?' }} px · 占位
+          {{ box.w_mm }} × {{ box.h_mm }} mm（{{ Math.round(box.w_mm * 8) }} ×
+          {{ Math.round(box.h_mm * 8) }} dot）。高度留空时按原图比例；图片数据随 spec 由服务端渲染。
         </p>
       </template>
 
@@ -401,7 +477,7 @@ function onPresetChange(event) {
     <section class="prop-section">
       <details class="spec-panel">
         <summary>查看 / 复制 spec JSON</summary>
-        <pre class="spec-code">{{ specJson }}</pre>
+        <pre class="spec-code">{{ specJsonShort }}</pre>
         <button class="btn btn-light btn--small" @click="copySpecJson">
           <AppIcon name="copy" :size="14" />
           <span>复制 spec</span>

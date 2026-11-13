@@ -181,48 +181,6 @@ export function writePrinterParams(payload) {
   })
 }
 
-/** POST /api/print/image — 上传 PNG 打印图片（query 指定尺寸/偏移/份数/浓度/对齐/addr） */
-export async function printImage(blob, params = {}) {
-  const query = new URLSearchParams()
-  for (const key of ['width_mm', 'height_mm', 'offset_x_mm', 'copies', 'density', 'align', 'addr']) {
-    const value = params[key]
-    if (value !== undefined && value !== null && value !== '') query.set(key, String(value))
-  }
-  const { signal, cancel } = timeoutSignal(30000)
-  try {
-    const response = await fetch(`${API_BASE}/api/print/image?${query.toString()}`, {
-      method: 'POST',
-      headers: { 'Content-Type': blob?.type || 'image/png' },
-      body: blob,
-      signal,
-    })
-    if (!response.ok) {
-      const detail = await readErrorDetail(response)
-      throw new ApiError(`后端返回 ${response.status}${detail ? `：${detail}` : ''}`, {
-        status: response.status,
-        detail,
-      })
-    }
-    const contentType = response.headers.get('content-type') || ''
-    if (contentType.includes('json')) return await response.json()
-    const text = await response.text()
-    if (!text) return null
-    try {
-      return JSON.parse(text)
-    } catch {
-      return { raw: text }
-    }
-  } catch (error) {
-    if (error instanceof ApiError) throw error
-    if (error?.name === 'AbortError') {
-      throw new ApiError('图片打印响应超时（30 秒），请确认后端正在运行。', { network: true })
-    }
-    throw new ApiError(`无法连接后端服务（${API_BASE}）。请先启动打印机后端。`, { network: true })
-  } finally {
-    cancel()
-  }
-}
-
 /** POST /api/learn — 测纸 / 定位；addr 指定目标打印机 */
 export function learnPaper(addr) {
   return request('/api/learn', {
@@ -240,7 +198,6 @@ export const api = {
   connectDevice,
   fetchPreview,
   printLabel,
-  printImage,
   learnPaper,
   writePrinterParams,
 }

@@ -300,6 +300,36 @@ def _render_content(spec: LabelSpec, dpi: int = DPI) -> Image.Image:
             flow_y = y0 + pic.height + gap_px
             continue
 
+        if kind == "image":
+            import base64
+            import io as _io
+            raw = item["src"]
+            payload = raw.split(",", 1)[1] if raw.startswith("data:") else raw
+            try:
+                data = base64.b64decode(payload, validate=False)
+                src_img = Image.open(_io.BytesIO(data)).convert("RGB")
+            except Exception as exc:  # noqa: BLE001
+                raise RenderError(f"items[{idx}] 图片解析失败：{exc}") from exc
+            box_w = mm_to_px(item["width_mm"]) if item.get("width_mm") else \
+                max(8, box_right - x0)
+            if item.get("height_mm"):
+                box_h = mm_to_px(item["height_mm"])
+            else:
+                box_h = max(1, int(box_w * src_img.height / src_img.width))
+            pic = src_img.resize((max(1, int(box_w)), max(1, int(box_h))),
+                                 Image.LANCZOS)
+            if x_abs is not None:
+                px = x0
+            elif align == "right":
+                px = box_right - pic.width
+            elif align == "center":
+                px = x0 + max(0, (box_right - x0 - pic.width) // 2)
+            else:
+                px = x0
+            img.paste(pic, (int(px), int(round(y0))))
+            flow_y = y0 + pic.height + gap_px
+            continue
+
         raise RenderError(f"未知元素类型 {kind!r}（items[{idx}]）")
 
     if spec.border:

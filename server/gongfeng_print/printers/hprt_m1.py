@@ -392,7 +392,8 @@ class HprtM1Backend(PrinterBackend):
                     density: int = 75, align: str = "left",
                     auto_learn: bool = False, form_feed: bool = False,
                     flow: str = "frames", trim_bottom_mm: float = 0.0,
-                    post_feed_mm: float = 0.0, wait: float = 0.4) -> PrinterStatus:
+                    post_feed_mm: float = 0.0, position_before: bool = False,
+                    position_wait: float = 7.0, wait: float = 0.4) -> PrinterStatus:
         if image.width > self.capabilities.head_dots + 16:
             raise BackendError(
                 f"位图宽度 {image.width}px 超过 M1 允许的 "
@@ -405,6 +406,16 @@ class HprtM1Backend(PrinterBackend):
         except Exception:
             pass
         started = time.time()
+        if position_before:
+            # 方案B：先让固件测纸定位（208 的 -5mm 回退在定位后生效），再打印
+            try:
+                self._write(CMD_LEARN, gap=0.3)
+                if self._log:
+                    self._log("[m1] 定位中（会走掉几张纸）…")
+                time.sleep(max(1.0, float(position_wait)))
+            except Exception as exc:  # noqa: BLE001
+                if self._log:
+                    self._log(f"[m1] 定位命令发送失败(继续): {exc}")
         pre = self.ensure_ready(auto_learn=auto_learn)
         # 握手成功但状态查询无回包（value<0）时不再阻断打印：
         # 部分固件在忙/刚上电时 status 查询会超时，但打印链路仍可用。

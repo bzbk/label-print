@@ -1,6 +1,26 @@
 <script setup>
+import { ref } from 'vue'
 import AppIcon from './AppIcon.vue'
-import { addItem, applyTemplate, state, updateDoc } from '../stores/store'
+import {
+  addImageElementFromFile,
+  addItem,
+  applyTemplate,
+  state,
+  updateDoc,
+} from '../stores/store'
+
+const imageInput = ref(null)
+
+function pickImage() {
+  if (state.imageProcessing) return
+  imageInput.value?.click()
+}
+
+async function onImageChange(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (file) await addImageElementFromFile(file)
+}
 
 const TYPES = [
   { type: 'text', icon: 'text', label: '文本', hint: '物料名 / 规格 / 编号' },
@@ -34,6 +54,26 @@ function toggleBorder(event) {
           <small>{{ entry.hint }}</small>
         </span>
       </button>
+
+      <button
+        class="palette-card"
+        :disabled="state.imageProcessing"
+        title="添加图片元素（PNG / JPG / SVG，作为画布元素参与排版）"
+        @click="pickImage()"
+      >
+        <span class="palette-icon"><AppIcon name="image" :size="18" /></span>
+        <span class="palette-copy">
+          <strong>{{ state.imageProcessing ? '处理中…' : '图片' }}</strong>
+          <small>PNG / JPG / SVG · 参与排版</small>
+        </span>
+      </button>
+      <input
+        ref="imageInput"
+        class="visually-hidden"
+        type="file"
+        accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml"
+        @change="onImageChange"
+      />
     </div>
 
     <div class="palette-section-head">

@@ -28,7 +28,7 @@ export function newId() {
 }
 
 export const LABEL_PRESETS = [
-  { id: '40x30', label: '40 × 30 mm', width_mm: 40, height_mm: 30 },
+  { id: '40x30', label: '40 × 30 mm（默认）', width_mm: 40, height_mm: 30 },
   { id: '40x60', label: '40 × 60 mm', width_mm: 40, height_mm: 60 },
   { id: '50x30', label: '50 × 30 mm', width_mm: 50, height_mm: 30 },
   { id: 'custom', label: '自定义尺寸…', width_mm: null, height_mm: null },
@@ -42,7 +42,9 @@ export const SYMBOLOGIES = [
 
 export const DENSITIES = [35, 55, 75, 95]
 
-export const TYPE_LABELS = { text: '文本', barcode: '条码', qr: '二维码' }
+export const TYPE_LABELS = { text: '文本', barcode: '条码', qr: '二维码', image: '图片' }
+
+export const IMAGE_LIMITS = { width_mm: [1, 72], height_mm: [1, 300] }
 
 /**
  * 纸卷偏移：M1 纸筒挡板在左侧、纸仓 50mm，
@@ -149,6 +151,20 @@ export function createItem(type, doc = createDoc(), patch = {}) {
       ...patch,
     }
   }
+  if (type === 'image') {
+    return {
+      ...base,
+      src: '',
+      width_mm: 20,
+      height_mm: null,
+      align: 'left',
+      naturalWidth: 0,
+      naturalHeight: 0,
+      x_mm: 2,
+      y_mm: PRINT_ZONE_TOP_MM,
+      ...patch,
+    }
+  }
   throw new Error(`未知元素类型：${type}`)
 }
 
@@ -209,8 +225,27 @@ export function itemBoxMm(item, doc) {
   if (item.type === 'barcode') {
     return { w_mm: barcodeWidthMm(item), h_mm: barcodeBoxHeightMm(item), layout: null }
   }
+  if (item.type === 'image') {
+    const width = clamp(Number(item.width_mm) || 20, IMAGE_LIMITS.width_mm[0], IMAGE_LIMITS.width_mm[1])
+    const explicitHeight = Number(item.height_mm)
+    const height =
+      Number.isFinite(explicitHeight) && explicitHeight > 0
+        ? clamp(explicitHeight, IMAGE_LIMITS.height_mm[0], IMAGE_LIMITS.height_mm[1])
+        : clamp(width * imageAspect(item), IMAGE_LIMITS.height_mm[0], IMAGE_LIMITS.height_mm[1])
+    return { w_mm: round1(width), h_mm: round1(height), layout: null }
+  }
   const size = clamp(Number(item.size_mm) || 14, LIMITS.qrSize[0], LIMITS.qrSize[1])
   return { w_mm: size, h_mm: size, layout: null }
+}
+
+/** 图片元素宽高比（高/宽）：优先编辑器探测到的原图尺寸 */
+export function imageAspect(item) {
+  const naturalWidth = Number(item?.naturalWidth)
+  const naturalHeight = Number(item?.naturalHeight)
+  if (naturalWidth > 0 && naturalHeight > 0) return naturalHeight / naturalWidth
+  const aspect = Number(item?.aspect)
+  if (aspect > 0) return aspect
+  return 1
 }
 
 /**
@@ -297,6 +332,19 @@ export function clampItemFields(item) {
   } else if (item.type === 'qr') {
     item.size_mm = clamp(Number(item.size_mm) || 14, LIMITS.qrSize[0], LIMITS.qrSize[1])
     item.data = String(item.data ?? '')
+  } else if (item.type === 'image') {
+    item.src = String(item.src ?? '')
+    item.width_mm = clamp(
+      Number(item.width_mm) || 20,
+      IMAGE_LIMITS.width_mm[0],
+      IMAGE_LIMITS.width_mm[1],
+    )
+    const height = Number(item.height_mm)
+    item.height_mm =
+      item.height_mm === null || item.height_mm === undefined || item.height_mm === '' || !Number.isFinite(height) || height <= 0
+        ? null
+        : clamp(height, IMAGE_LIMITS.height_mm[0], IMAGE_LIMITS.height_mm[1])
+    item.align = ['left', 'center', 'right'].includes(item.align) ? item.align : 'left'
   }
   return item
 }
@@ -335,6 +383,22 @@ export function itemToSpec(item) {
       data: String(item.data ?? ''),
       size_mm: round1(Number(item.size_mm) || 14),
     }
+  }
+  if (item.type === 'image') {
+    const spec = {
+      ...base,
+      src: String(item.src ?? ''),
+      width_mm: round1(
+        clamp(Number(item.width_mm) || 20, IMAGE_LIMITS.width_mm[0], IMAGE_LIMITS.width_mm[1]),
+      ),
+    }
+    if (Number(item.height_mm) > 0) {
+      spec.height_mm = round1(
+        clamp(Number(item.height_mm), IMAGE_LIMITS.height_mm[0], IMAGE_LIMITS.height_mm[1]),
+      )
+    }
+    if (item.align && item.align !== 'left') spec.align = item.align
+    return spec
   }
   return base
 }
@@ -387,7 +451,7 @@ export function fromSpec(raw) {
   for (const rawItem of items) {
     if (!rawItem || typeof rawItem !== 'object') continue
     const type = rawItem.type
-    if (!['text', 'barcode', 'qr'].includes(type)) continue
+    if (!['text', 'barcode', 'qr', 'image'].includes(type)) continue
     const item = createItem(type, doc)
     item.x_mm = round1(toNumber(rawItem.x_mm, item.x_mm))
     item.y_mm = round1(toNumber(rawItem.y_mm, item.y_mm))
@@ -402,9 +466,27 @@ export function fromSpec(raw) {
       item.symbology = SYMBOLOGIES.some((s) => s.value === rawItem.symbology) ? rawItem.symbology : 'code128'
       item.height_mm = clamp(toNumber(rawItem.height_mm, 12), LIMITS.barcodeHeight[0], LIMITS.barcodeHeight[1])
       item.show_text = rawItem.show_text !== false
-    } else {
+    } else if (type === 'qr') {
       item.data = String(rawItem.data ?? '')
       item.size_mm = clamp(toNumber(rawItem.size_mm, 14), LIMITS.qrSize[0], LIMITS.qrSize[1])
+    } else if (type === 'image') {
+      const src = String(rawItem.src ?? '').trim()
+      if (!src) continue
+      item.src = src
+      item.width_mm = clamp(
+        toNumber(rawItem.width_mm, 20),
+        IMAGE_LIMITS.width_mm[0],
+        IMAGE_LIMITS.width_mm[1],
+      )
+      item.height_mm =
+        rawItem.height_mm === undefined || rawItem.height_mm === null
+          ? null
+          : clamp(
+              toNumber(rawItem.height_mm, 20),
+              IMAGE_LIMITS.height_mm[0],
+              IMAGE_LIMITS.height_mm[1],
+            )
+      item.align = ['left', 'center', 'right'].includes(rawItem.align) ? rawItem.align : 'left'
     }
     clampItemFields(item)
     normalizeItemPosition(item, doc)

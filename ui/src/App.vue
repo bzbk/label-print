@@ -5,13 +5,11 @@ import ElementPalette from './components/ElementPalette.vue'
 import LabelCanvas from './components/LabelCanvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
 import StatusBar from './components/StatusBar.vue'
-import ImagePrintDialog from './components/ImagePrintDialog.vue'
 import PrinterDialog from './components/PrinterDialog.vue'
 import PreviewDialog from './components/PreviewDialog.vue'
 import ToastStack from './components/ToastStack.vue'
 import {
   clearSelection,
-  closeImagePrint,
   closePreview,
   closePrinterDialog,
   duplicateItem,
@@ -52,10 +50,6 @@ function onKeydown(event) {
     return
   }
   if (event.key === 'Escape') {
-    if (state.imagePrint.open) {
-      closeImagePrint()
-      return
-    }
     if (state.printerDialog.open) {
       closePrinterDialog()
       return
@@ -104,7 +98,6 @@ onBeforeUnmount(() => {
     <StatusBar />
     <PreviewDialog />
     <PrinterDialog />
-    <ImagePrintDialog />
     <ToastStack />
   </div>
 </template>

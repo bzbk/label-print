@@ -49,7 +49,7 @@ MIN_TRIM_BOTTOM_MM, MAX_TRIM_BOTTOM_MM = 0.0, 5.0
 OFFSET_STEP_MM = 0.5
 MAX_COPIES = 99
 MAX_ITEMS = 200
-MAX_SPEC_BYTES = 2 * 1024 * 1024  # 2 MiB，防止超大请求体
+MAX_SPEC_BYTES = 16 * 1024 * 1024  # 16 MiB（图片元素 base64 会比纯文本大）
 
 # zint 符号体系 -> zint barcode id / 类别。渲染层共用这张表。
 SYMBOLOGIES: dict[str, dict[str, Any]] = {
@@ -72,7 +72,7 @@ SYMBOLOGIES: dict[str, dict[str, Any]] = {
     "hanxin": {"zint": 116, "linear": False},
 }
 
-ITEM_TYPES = ("text", "barcode", "qr", "gap")
+ITEM_TYPES = ("text", "barcode", "qr", "gap", "image")
 
 
 class SpecError(ValueError):
@@ -274,6 +274,19 @@ def _parse_items(raw_items: Any) -> list[dict[str, Any]]:
                                    allow_empty=False)
             item["size_mm"] = _as_float(raw.get("size_mm"),
                                         f"items[{idx}].size_mm", 14.0, 5.0, 60.0)
+            item["align"] = normalize_align(raw.get("align"),
+                                            "left" if "x_mm" in item else "center")
+        elif kind == "image":
+            src = raw.get("src")
+            if not isinstance(src, str) or not src.strip():
+                raise SpecError(f"items[{idx}].src 必须是非空字符串（data URL 或 base64）")
+            item["src"] = src.strip()
+            if raw.get("width_mm") is not None:
+                item["width_mm"] = _as_float(raw.get("width_mm"),
+                                             f"items[{idx}].width_mm", 20.0, 1.0, 72.0)
+            if raw.get("height_mm") is not None:
+                item["height_mm"] = _as_float(raw.get("height_mm"),
+                                              f"items[{idx}].height_mm", 20.0, 1.0, 300.0)
             item["align"] = normalize_align(raw.get("align"),
                                             "left" if "x_mm" in item else "center")
         elif kind == "gap":

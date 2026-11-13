@@ -6,10 +6,10 @@
 
 ![设计器主界面](./docs/editor.png)
 
-- 左：元素库 / 标签模板 / 外框开关
+- 左：元素库（文本 / 条码 / 二维码 / **图片**）/ 标签模板 / 外框开关
 - 中：打印头坐标 mm 标尺 + 1mm 网格；**左侧灰斜纹 = 纸卷偏移留白（10mm），红色虚线 = 打印头原点 x=0**；顶部/底部浅红斜纹标出硬件不可打印区，中间细线框出可打印区域
 - 右：所选元素 / 标签属性（含纸卷偏移说明）+ 实时 spec JSON
-- 顶：品牌、新建、打开/保存 JSON、标签预设、**纸卷偏移 / 垂直微调 / 底部少走**、份数、浓度、对齐、**导入图片**、预览、打印
+- 顶：品牌、新建、打开/保存 JSON、标签预设、**纸卷偏移 / 垂直微调 / 底部少走**、份数、浓度、对齐、预览、打印
 - 打印机：状态栏入口 → **扫描蓝牙 / 选择 / 连接**，并支持**写入设备参数（207/208）**；记住上次选择与参数（localStorage），预览/打印请求自动带 `addr`
 - 底：打印机状态（型号 / 状态 / 错误）、刷新、测纸、**偏移 / 可打印区 / 位图尺寸**
 
@@ -17,9 +17,9 @@
 
 ![可打印区域标注](./docs/print-zone.png)
 
-工具栏「导入图片」支持 PNG / JPG / JPEG / SVG（SVG 在浏览器端栅格化），预览确认后再上传打印：
+左侧元素库新增「图片」：选择 PNG / JPG / SVG 后作为**画布元素**参与排版（可拖拽、改宽高/对齐，最终随整个标签渲染）：
 
-![导入图片打印](./docs/image-print.png)
+![图片元素](./docs/image-element.png)
 
 后端按「纸卷偏移 + 标签宽」渲染的真实 PNG 预览（40mm 纸 + 10mm 偏移 = 400 × 240 px）：
 
@@ -67,7 +67,7 @@ ui/
 ├── index.html            # 入口 HTML（中文 lang、原创 favicon）
 ├── package.json          # name: gofor-label-print，仅 vue + vite + @vitejs/plugin-vue
 ├── vite.config.js
-├── docs/                 # 自测截图（editor / printer-dialog / image-print / print-zone / offset-y / trim-bottom / preview / offline-preview）
+├── docs/                 # 自测截图（editor / printer-dialog / image-element / print-zone / offset-y / trim-bottom / preview / offline-preview）
 ├── README.md
 └── src/
     ├── main.js
@@ -75,7 +75,7 @@ ui/
     ├── api.js            # 后端 REST 封装（超时/错误友好化）
     ├── units.js          # mm↔dot、文字测量、按 mm 折行
     ├── label.js          # 文档模型、纸卷/垂直偏移、可打印区、元素尺寸、spec 序列化
-    ├── imagePrint.js     # 导入图片/SVG 的浏览器端栅格化与目标位图生成
+    ├── imageElement.js   # 图片元素：SVG 栅格化、大图压缩、dataURL 生成
     ├── styles.css        # 全部样式（深色工具条 + 浅色工作区）
     ├── components/
     │   ├── AppToolbar.vue      # 顶部工具条（含纸卷 / 垂直偏移输入）
@@ -85,7 +85,6 @@ ui/
     │   ├── PropertyPanel.vue   # 右侧属性面板 + spec JSON
     │   ├── StatusBar.vue       # 打印机状态栏
     │   ├── PrinterDialog.vue   # 打印机扫描 / 选择 / 连接 / 设置弹窗
-    │   ├── ImagePrintDialog.vue # 导入图片打印确认（含最终位图预览）
     │   ├── PreviewDialog.vue   # 预览弹窗
     │   ├── ToastStack.vue
     │   └── AppIcon.vue         # 原创 24×24 线稿图标
@@ -151,16 +150,17 @@ M1 的**纸筒挡板在左侧、纸筒仓宽 50mm**：装入 40mm 卷纸后，�
 
 ---
 
-## 4. 导入图片 / SVG 打印
+## 4. 图片元素（参与排版）
 
-工具栏「导入图片」可选择 `.png` / `.jpg` / `.jpeg` / `.svg`，预览确认后上传打印（使用当前选中的打印机与当前标签参数）：
+左侧元素库点击「图片」→ 选择 `.png` / `.jpg` / `.jpeg` / `.svg`，图片会作为 **`type:"image"` 画布元素**加入标签（不是单独弹窗打印）：
 
-1. **SVG 在浏览器端栅格化**：Image 加载 → canvas 按当前标签尺寸绘制（白底、等比缩放居中；预览位图宽度包含纸卷偏移：40×30 + offset 10 → 400×240）→ `canvas.toBlob('image/png')`。
-2. 上传 `POST /api/print/image?width_mm=40&height_mm=30&offset_x_mm=10&copies=1&density=75&align=left&addr=...`，body 为 PNG 二进制。**上传体是标签区域 320×240 PNG**，服务端再按标签尺寸缩放并应用纸卷偏移（避免重复偏移）。
-3. 弹窗展示最终位图预览（含偏移留白）、文件名、位图尺寸、打印机、份数与浓度；点「打印图片」才真正上传打印。
-4. 处理/打印时按钮 loading；成功 toast「图片打印任务已发送：正常」，失败展示后端 error 原文（如设备忙）。
+1. **SVG 在浏览器端栅格化**：Image 加载 → canvas 白底绘制 → PNG dataURL；PNG / JPG 也统一解码后重绘为白底 PNG/JPEG dataURL（透明区域变白，避免热敏打印成黑块）。
+2. 新图片默认放在可打印区内（x=2、y=4），宽度 **20mm**、高度留空（按原图比例）。
+3. 画布用 `<img>` 渲染，可拖拽、选中；右侧属性面板可改 **X / Y / 宽度(mm) / 高度(mm) / 对齐**，高度留空或勾选「等比（自动）」时按原图比例。
+4. **大图体积控制**：源 dataURL > 2MB 或像素过大时，先在 canvas 缩到最长边 **800px** 再转 dataURL（PNG 仍超 2MB 时降级 JPEG），保证 spec 不至于过大（后端上限 16MB）。
+5. 预览/打印时图片元素原样进入 spec（`src` = dataURL），由服务端按 `width_mm`/`height_mm` 以 203dpi LANCZOS 缩放后贴到画布；属性面板的 spec JSON 展示会**截断 src**，复制/导出仍包含完整 dataURL。
 
-> 未选择打印机时点「导入图片」会提示「请先选择打印机」并打开打印机弹窗。图片按**等比缩放居中**（不拉伸）；需要满版请提供与标签同比例的图片。
+> 图片元素只是普通元素：拖出可打印区域时同样只有黄色软提醒，不影响保存/打印。
 
 ---
 
@@ -197,7 +197,6 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 | `GET` | `/api/scan?seconds=8` | 主动扫描蓝牙设备 | 「扫描蓝牙设备」按钮；扫描中禁用并显示 loading |
 | `POST` | `/api/connect` | 连接指定地址并握手（body `{"addr":...}`） | 设备行「连接」；成功显示型号/状态，失败展示后端 error 原文 |
 | `POST` | `/api/printer/params` | 写入设备参数 207/208（body `{addr, start_pos_mm?, feed_after_pos_mm?}`） | 弹窗「打印机设置」；显示 `written`/error，参数写入 localStorage |
-| `POST` | `/api/print/image?width_mm=&height_mm=&offset_x_mm=&copies=&density=&align=&addr=` | 上传 PNG 二进制打印（SVG 已在浏览器栅格化） | 「导入图片」→ 预览确认 → 上传；成功/失败 toast 与弹窗提示 |
 | `POST` | `/api/preview` | 传 spec（含 `addr`），返回 PNG | 兼容 `image/png` 与 JSON base64；弹窗显示，可保存 PNG |
 | `POST` | `/api/print` | 传 spec + `addr` + `copies`，真正打印 | 成功 toast，失败 toast + 状态栏离线提示 |
 | `POST` | `/api/learn` | 测纸 / 重新定位（会走纸！） | 状态栏「测纸」按钮（带当前 addr），成功/失败 toast |
@@ -236,7 +235,8 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
   "items": [
     { "type": "text", "text": "物料 A", "size": 28, "bold": true, "align": "left", "x_mm": 2, "y_mm": 2 },
     { "type": "barcode", "data": "ABC123", "symbology": "code128", "height_mm": 12, "x_mm": 2, "y_mm": 15 },
-    { "type": "qr", "data": "https://x", "size_mm": 14, "x_mm": 18, "y_mm": 14 }
+    { "type": "qr", "data": "https://x", "size_mm": 14, "x_mm": 18, "y_mm": 14 },
+    { "type": "image", "src": "data:image/png;base64,…", "width_mm": 20, "x_mm": 2, "y_mm": 4 }
   ]
 }
 ```
@@ -249,11 +249,12 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 | `offset_y_mm` | number | 垂直微调（mm），默认 0，范围 -15~15，步进 0.5；正=下移、负=上移 |
 | `trim_bottom_mm` | number | 底部少走（mm），默认 0，范围 0~5，步进 0.5；打印只下发 `(高度 − trim)` 行，等效回退 |
 | `density` | number | 打印浓度，限 35 / 55 / 75 / 95 |
-| `items[].type` | string | `text` / `barcode` / `qr` |
+| `items[].type` | string | `text` / `barcode` / `qr` / `image` |
 | `items[].x_mm` / `y_mm` | number | 相对标签纸左上角坐标（mm）；编辑器总是输出 |
 | text：`text` / `size` / `bold` / `align` | | 内容 / dot 字号 / 加粗 / `left`·`center`·`right` |
 | barcode：`data` / `symbology` / `height_mm` | | 数据 / `code128`·`ean13`·`code39` / 条码高度（mm） |
 | qr：`data` / `size_mm` | | 数据 / 边长（mm） |
+| image：`src` / `width_mm` / `height_mm` / `align` | | dataURL（必填）/ 宽（默认 20）/ 高（可选，缺省按原图比例）/ 对齐 |
 
 **可选扩展字段**（后端支持，默认不输出，保持与基础契约兼容）：
 
@@ -268,7 +269,8 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 
 - 纸卷偏移、文本折行宽度、条码高度、二维码边长全部按 mm 计算；
 - 编辑器的条码/二维码只是示意，**实际条码由服务端生成，宽度以预览为准**（属性面板条码区也有该提示）；
-- 打开 JSON 时字段缺失会用默认值补齐（旧文件无 `offset_x_mm` 按 10、无 `offset_y_mm` 按 0、无 `trim_bottom_mm` 按 0 处理；元素 y<4 自动下移到 4），非法 JSON / 缺少宽高会 toast 报错，不打断当前编辑。
+- 图片元素 `src` 为 dataURL（大图已在浏览器端压缩到最长边 800px / ≤2MB），服务端按 mm 尺寸 LANCZOS 缩放渲染；
+- 打开 JSON 时字段缺失会用默认值补齐（旧文件无 `offset_x_mm` 按 10、无 `offset_y_mm` 按 0、无 `trim_bottom_mm` 按 0 处理），非法 JSON / 缺少宽高会 toast 报错，不打断当前编辑。
 
 ---
 
@@ -283,7 +285,7 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 | 修改参数 | 右侧属性面板（内容、字号、加粗、对齐、反白、条码符号/高度/文字、二维码尺寸） |
 | 打印机 | 点击状态栏「当前打印机 / 选择打印机」芯片 → 扫描 → 连接；选择会记在 localStorage |
 | 可打印区域 | 顶部 4mm / 底部 1mm 为硬件不可打印（浅红斜纹）；中间细线为 4–29mm 可打印区，越界仅黄色提醒 |
-| 导入图片 | 工具栏「导入图片」→ 选择 PNG / JPG / SVG → 预览确认 → 打印图片 |
+| 图片元素 | 左侧元素库「图片」→ 选择 PNG / JPG / SVG → 作为画布元素加入，可拖拽/改宽高/对齐 |
 | 纸卷偏移 | 顶部工具条或右侧「标签设置 → 纸卷偏移 mm」，40mm 纸填 10、50mm 纸填 0 |
 | 垂直微调 | 顶部工具条或右侧「垂直微调 mm」：正 = 内容下移、负 = 上移（-15~15，步进 0.5） |
 | 底部少走 | 顶部工具条或右侧「底部少走 mm」：打印后少走多少 mm，等效回退（0~5，默认 0，可手动调 1~2） |
@@ -307,9 +309,9 @@ $ npm run build
 vite v7.3.8 building client environment for production...
 ✓ 23 modules transformed.
 dist/index.html                   1.07 kB │ gzip:  0.65 kB
-dist/assets/index-fNnXavwD.css   27.16 kB │ gzip:  6.24 kB
-dist/assets/index-ClgYatAF.js   160.38 kB │ gzip: 57.80 kB
-✓ built in 679ms
+dist/assets/index-C-Eip_1u.css   27.10 kB │ gzip:  6.26 kB
+dist/assets/index-DmW46nRw.js   159.74 kB │ gzip: 57.65 kB
+✓ built in 684ms
 
 $ npm run dev        # VITE v7.3.8 ready → http://127.0.0.1:5173/
 $ curl -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/           # 200
@@ -318,7 +320,7 @@ $ curl -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/src/main.js # 200
 
 ### 9.2 浏览器实测（Playwright Chromium，1440 × 900）
 
-> 打印机设置（207/208）、图片打印与标签打印请求均使用 mock 验证，**未触发真机写入/出纸**；连接、状态查询与预览为真机验证。
+> 打印机设置（207/208）、打印请求与图片元素的 spec 组装均使用 mock 验证，**未触发真机写入/出纸**；连接、状态查询与预览为真机验证。
 
 | 项目 | 结果 |
 | --- | --- |
@@ -342,8 +344,10 @@ $ curl -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/src/main.js # 200
 | 可打印区标注 | 顶部斜纹带高 64px（4mm×8×2）、底部 16px（1mm×8×2）、可打印区框高 400px（25mm×8×2）；标注「可打印区域 25mm」；画布说明与状态栏显示「可打印区 4–29 mm（25mm）」 |
 | 越界软提醒 | 元素 Y 设为 0 → 边框变黄、属性面板提示「超出可打印区域，打印会被裁切」；预览/打印按钮仍可用，spec 仍可保存 y=0（软提醒） |
 | 条码提示 | 属性面板条码区显示「实际条码由服务端生成，宽度以预览为准」 |
-| 导入图片（SVG） | 「导入图片」选择 SVG → 弹窗预览位图 400×240（含偏移）、标注 SVG 已栅格化；上传为 PNG 320×240，query 带 width/height/offset/copies/density/align/addr |
-| 导入图片（失败） | mock 后端 busy → 弹窗显示后端 error 原文 + 失败 toast；**未真机打印** |
+| 图片元素（SVG） | 元素库「图片」选择 SVG → 画布出现 image 元素：原图 300×150、宽 20mm、等比高 10mm、y=4；选中后属性面板含 X/Y/宽度/高度/对齐/等比 |
+| 图片元素编辑 | 宽改 30 → 等比高自动 15mm；高度固定 8 → spec `height_mm:8`；勾回等比 → spec 省略 height；对齐居中 → spec `align:"center"`；拖动 +2/+1mm 生效 |
+| 大图体积控制 | 2.8MB PNG（2000×1500）→ 画布元素原图 800×600、dataURL 约 0.4MB（PNG 超限降级 JPEG）；spec 面板 src 截断提示，复制/导出仍为完整 dataURL |
+| 图片进 spec | mock 捕获 preview/print 请求体：items 含 `{type:"image", src:"data:image/...", width_mm:20, y_mm:4}`（高度留空时省略），随普通标签一起渲染；**未真机打印** |
 | 打印机设置 | 弹窗「打印机设置（写入设备）」：黄色提示「写入会触发打印机重新定位…208 建议 -2mm」；默认 207=0、208=-2，范围 -5~5 步进 0.5 |
 | 写入成功（mock） | 输入 1.5/-1.5 → 「写入中…」按钮/输入禁用 → 显示「已写入：207=1.5mm(18)，208=-1.5mm(-18)」+ toast「已写入打印机」；请求体含 addr/start_pos_mm/feed_after_pos_mm；localStorage 持久化，刷新后回填 |
 | 写入失败（mock） | 后端返回 `{ok:false,error:"设备忙：…"}` → 设置区显示后端原文 + 失败 toast；不覆盖已保存值 |
@@ -366,7 +370,7 @@ $ curl -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/src/main.js # 200
 - 界面按桌面使用设计，最小宽度约 1024px；移动端未适配。
 - 打印机型号默认 M1；换机型时后端 `/api/models` 可扩展，前端会按 `/api/status` 返回的型号展示。
 - 打印机需先在系统蓝牙中配对一次；扫描依赖 BlueZ/bluetoothctl，连接可能因设备被占用（busy）失败，此时 UI 会直接展示后端 error 文案，重试即可。
-- 导入图片按等比缩放居中（不拉伸）；如需满版请提供与标签同比例的图片（后续可增加裁剪选项）。
+- 图片元素按原图比例或指定宽高缩放；如需满版请调整宽高或提供与标签同比例的图片（后续可增加裁剪选项）。图片 dataURL 会随 spec 传输（单图 ≤2MB、后端上限 16MB）。
 
 ## 11. 品牌与原创声明
 

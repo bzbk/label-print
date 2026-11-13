@@ -44,11 +44,27 @@ def render_html(html: str, out_png: str) -> None:
         os.unlink(path)
 
 
-def to_bw(src: str, dst: str) -> None:
+# 可打印区（像素，203dpi）：x 0..304 (38mm)、y 32..216 (4..27mm)
+SAFE = (0, 32, 304, 216)
+
+
+def to_bw(src: str, dst: str, check_safe: bool = True) -> None:
     from PIL import Image
     img = Image.open(src).convert("L").resize((W, H), Image.LANCZOS)
     img = img.point(lambda v: 0 if v < 140 else 255).convert("1")
     img.save(dst)
+    if check_safe:
+        px = img.convert("L").load()
+        xs, ys = [], []
+        for y in range(H):
+            for x in range(W):
+                if px[x, y] < 128:
+                    xs.append(x); ys.append(y)
+        if xs:
+            box = (min(xs), min(ys), max(xs), max(ys))
+            left, top, right, bottom = SAFE
+            over = box[0] < left or box[1] < top or box[2] > right or box[3] > bottom
+            print(f"[layout] content bbox={box} safe={SAFE} {'!! 越界' if over else 'OK'}")
 
 
 def print_image(png_path: str, addr: str, width_mm=40, height_mm=30, offset_x_mm=10) -> dict:

@@ -159,8 +159,8 @@ button {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 10px;
-  padding: 9px 16px;
+  gap: 7px 8px;
+  padding: 8px 14px;
   background: linear-gradient(180deg, var(--toolbar-from) 0%, var(--toolbar-to) 100%);
   color: #e8ecf4;
   border-bottom: 1px solid #10151f;
@@ -240,7 +240,7 @@ button {
 .toolbar-field {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   font-size: 11px;
   color: #93a0b8;
   white-space: nowrap;
@@ -252,7 +252,7 @@ button {
   color: #e6edf9;
   border: 1px solid #334056;
   border-radius: 6px;
-  padding: 5px 7px;
+  padding: 5px 6px;
   font-size: 12px;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -277,6 +277,12 @@ button {
 .toolbar-spacer {
   flex: 1 1 12px;
   min-width: 4px;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
 }
 
 /* ---------------------------------------------------------------- 工作区 */

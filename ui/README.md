@@ -9,7 +9,7 @@
 - 左：元素库 / 标签模板 / 外框开关
 - 中：打印头坐标 mm 标尺 + 1mm 网格；**左侧灰斜纹 = 纸卷偏移留白（10mm），红色虚线 = 打印头原点 x=0**
 - 右：所选元素 / 标签属性（含纸卷偏移说明）+ 实时 spec JSON
-- 顶：品牌、新建、打开/保存 JSON、标签预设、**纸卷偏移**、份数、浓度、对齐、预览、打印
+- 顶：品牌、新建、打开/保存 JSON、标签预设、**纸卷偏移 / 垂直微调**、份数、浓度、对齐、预览、打印
 - 底：打印机状态（型号 / 状态 / 错误）、刷新、测纸、**偏移与位图尺寸**
 
 后端按「纸卷偏移 + 标签宽」渲染的真实 PNG 预览（40mm 纸 + 10mm 偏移 = 400 × 240 px）：
@@ -21,6 +21,10 @@
 ![后端未启动时的预览错误态](./docs/offline-preview.png)
 
 ---
+
+调整「垂直微调」时，标签区域顶部/底部会出现一条黄色虚线，提示可能被裁切的方向（不改变网格与元素坐标）：
+
+![垂直微调提示](./docs/offset-y.png)
 
 ## 1. 快速开始
 
@@ -46,17 +50,17 @@ ui/
 ├── index.html            # 入口 HTML（中文 lang、原创 favicon）
 ├── package.json          # name: gofor-label-print，仅 vue + vite + @vitejs/plugin-vue
 ├── vite.config.js
-├── docs/                 # 自测截图（editor / preview / offline-preview）
+├── docs/                 # 自测截图（editor / offset-y / preview / offline-preview）
 ├── README.md
 └── src/
     ├── main.js
     ├── App.vue           # 三栏布局 + 全局快捷键
     ├── api.js            # 后端 REST 封装（超时/错误友好化）
     ├── units.js          # mm↔dot、文字测量、按 mm 折行
-    ├── label.js          # 文档模型、纸卷偏移、元素尺寸、spec 序列化/反序列化
+    ├── label.js          # 文档模型、纸卷/垂直偏移、元素尺寸、spec 序列化/反序列化
     ├── styles.css        # 全部样式（深色工具条 + 浅色工作区）
     ├── components/
-    │   ├── AppToolbar.vue      # 顶部工具条（含纸卷偏移输入）
+    │   ├── AppToolbar.vue      # 顶部工具条（含纸卷 / 垂直偏移输入）
     │   ├── ElementPalette.vue  # 左侧元素库/模板
     │   ├── LabelCanvas.vue     # 画布、打印头原点/偏移留白、mm 标尺、拖拽/缩放
     │   ├── LabelElement.vue    # 文本（逐行渲染）、条码/二维码 SVG 示意
@@ -70,7 +74,7 @@ ui/
 
 ---
 
-## 2. 纸卷偏移（关键硬件事实）
+## 2. 纸卷偏移与垂直微调（关键硬件事实）
 
 M1 的**纸筒挡板在左侧、纸筒仓宽 50mm**：装入 40mm 卷纸后，纸面相对打印头原点整体**右移 10mm**。
 若不把偏移告诉后端，位图会从打印头 x=0 开始画，导致**左侧被裁、文字显示不全**。
@@ -80,15 +84,20 @@ M1 的**纸筒挡板在左侧、纸筒仓宽 50mm**：装入 40mm 卷纸后，�
 | 字段 | 标签级 `offset_x_mm`（与 `width_mm` / `height_mm` / `border` / `density` 同级） |
 | 默认值 | **10.0**（40mm 卷纸）；范围 **0 ~ 20**，步进 **0.5** |
 | 常用取值 | **40mm 纸 = 10；50mm 纸 = 0**（挡板在左，纸卷靠左装入后右移） |
-| 输入位置 | 顶部工具条「纸卷偏移 mm」+ 右侧「标签设置 → 纸卷偏移」（带说明气泡） |
+| 垂直微调 | 标签级 `offset_y_mm`：默认 **0**，范围 **-15 ~ 15**，步进 0.5；**正 = 内容下移、负 = 内容上移** |
+| 输入位置 | 顶部工具条「纸卷偏移 / 垂直微调」+ 右侧「标签设置」对应输入（均带说明气泡） |
 | 预设联动 | 切 40×30 / 40×60 → 自动 10；切 50×30 → 自动 0（仍可手动微调） |
 | 画布可视化 | 红色虚线 = 打印头原点 **x=0**；左侧浅灰斜纹 = **偏移留白（不打印）**；标签内容、网格、**外框都只从纸边（x=offset）开始** |
 | 标尺 | 按**打印头坐标**标注 `0 … offset+width`（40mm 纸 + 10mm 偏移 → 0~50mm） |
 | 后端渲染 | 位图宽 = `offset + width`（40 + 10 → **400px**），内容整体右移 offset 绘制；`/api/preview` 返回的 PNG 即真实横向位置 |
+| 垂直画布提示 | `offset_y_mm ≠ 0` 时，在标签区域**下移→底部 / 上移→顶部**画一条黄色虚线，仅提示可能被裁切的方向，不改网格/坐标 |
+| 垂直渲染 | 内容整体上下平移 `offset_y_mm`，**位图高度不变**（40×30mm 仍为 240px），越界部分被裁切 |
 | 上限校验 | `offset + width > 50mm`（400px）时属性面板给出黄色告警，后端也会返回 400 |
 
 > 编辑器内部元素的 `x_mm` 始终**相对标签纸左边**（0…width），打印头物理位置 = `offset_x_mm + x_mm`；
 > 属性面板会同时显示「打印头坐标 X」。
+>
+> **垂直微调 `offset_y_mm`**：用于补偿标签在打印头上的上下位置偏差——内容整体上下微调，不影响间隙检测；正 = 下移、负 = 上移；位图高度不变，超出标签的部分会被裁切。
 
 ---
 
@@ -136,7 +145,7 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 
 ```json
 { "width_mm": 40, "height_mm": 30, "border": false,
-  "offset_x_mm": 10, "density": 75,
+  "offset_x_mm": 10, "offset_y_mm": 0, "density": 75,
   "copies": 2, "items": [ ... ] }
 ```
 
@@ -152,6 +161,7 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
   "height_mm": 30,
   "border": false,
   "offset_x_mm": 10,
+  "offset_y_mm": 0,
   "density": 75,
   "items": [
     { "type": "text", "text": "物料 A", "size": 28, "bold": true, "align": "left", "x_mm": 2, "y_mm": 2 },
@@ -166,6 +176,7 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 | `width_mm` / `height_mm` | number | 标签宽高（mm），默认 40 × 30 |
 | `border` | boolean | 是否打印标签外框（只画在标签区域内，不含偏移留白） |
 | `offset_x_mm` | number | 纸卷偏移（mm），默认 10，范围 0~20，步进 0.5 |
+| `offset_y_mm` | number | 垂直微调（mm），默认 0，范围 -15~15，步进 0.5；正=下移、负=上移 |
 | `density` | number | 打印浓度，限 35 / 55 / 75 / 95 |
 | `items[].type` | string | `text` / `barcode` / `qr` |
 | `items[].x_mm` / `y_mm` | number | 相对标签纸左上角坐标（mm）；编辑器总是输出 |
@@ -186,7 +197,7 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 
 - 纸卷偏移、文本折行宽度、条码高度、二维码边长全部按 mm 计算；
 - 编辑器的条码/二维码只是示意，**真正可扫描的编码与最终条码宽度由后端 zint 渲染结果决定**（以预览 PNG 为准）；
-- 打开 JSON 时字段缺失会用默认值补齐（旧文件无 `offset_x_mm` 时按 10 处理），非法 JSON / 缺少宽高会 toast 报错，不打断当前编辑。
+- 打开 JSON 时字段缺失会用默认值补齐（旧文件无 `offset_x_mm` 按 10、无 `offset_y_mm` 按 0 处理），非法 JSON / 缺少宽高会 toast 报错，不打断当前编辑。
 
 ---
 
@@ -200,6 +211,7 @@ VITE_LABEL_API_BASE=http://192.168.1.20:17600 npm run build
 | 删除 / 复制 | `Delete` / `Ctrl+D` |
 | 修改参数 | 右侧属性面板（内容、字号、加粗、对齐、反白、条码符号/高度/文字、二维码尺寸） |
 | 纸卷偏移 | 顶部工具条或右侧「标签设置 → 纸卷偏移 mm」，40mm 纸填 10、50mm 纸填 0 |
+| 垂直微调 | 顶部工具条或右侧「垂直微调 mm」：正 = 内容下移、负 = 上移（-15~15，步进 0.5） |
 | 元素对齐标签 | 顶部「对齐」下拉（左/水平居中/右/上/垂直居中/下） |
 | 标签尺寸 | 顶部「标签」预设（40×30 / 40×60 / 50×30 / 自定义 mm），会自动匹配纸卷偏移 |
 | 缩放画布 | 右下角 `-` / `%` / `+` / 「适应」 |
@@ -220,9 +232,9 @@ $ npm run build
 vite v7.3.8 building client environment for production...
 ✓ 23 modules transformed.
 dist/index.html                   1.07 kB │ gzip:  0.65 kB
-dist/assets/index-GRoBC1fi.css   19.54 kB │ gzip:  5.03 kB
-dist/assets/index-lXKaPdQe.js   128.54 kB │ gzip: 48.52 kB
-✓ built in 671ms
+dist/assets/index-AR7tOOxm.css   20.08 kB │ gzip:  5.14 kB
+dist/assets/index-Nv2t_1Tg.js   130.70 kB │ gzip: 49.12 kB
+✓ built in 650ms
 
 $ npm run dev        # VITE v7.3.8 ready → http://127.0.0.1:5173/
 $ curl -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/           # 200
@@ -242,8 +254,10 @@ $ curl -o /dev/null -w '%{http_code}' http://127.0.0.1:5173/src/main.js # 200
 | 预设联动 | 50×30 → 自动 offset 0（toast 提示）；40×30 → 自动 offset 10 |
 | 保存 JSON | 顶层含 `"offset_x_mm": 10`，字段与契约一致（无 id/名称） |
 | 后端状态 | `GET /api/status` → 200，状态栏「M1 · 正常」绿点 +「偏移 10 mm / 位图 400 × 240 dot」 |
-| 后端预览 | `POST /api/preview` 请求体含 `offset_x_mm: 10` → 返回 **400 × 240** PNG（40mm 标签 + 10mm 偏移），弹窗正常显示 |
-| 打印请求 | 用 mock 的 `/api/print` 捕获请求体：含 `offset_x_mm: 10` 与 `copies: 2`，toast「打印任务已发送（2 份）」；**未触发真机出纸** |
+| 垂直微调 | 工具条 / 属性面板设 **+3** → 画布底部黄色虚线「内容下移 3 mm · 底部可能被裁切」，spec 顶层 `offset_y_mm: 3`；设 **-2** → 顶部提示；网格与元素坐标不变 |
+| 旧 JSON 兼容 | 打开无 `offset_y_mm` 的旧文件 → 自动按 0 处理，spec 顶层补出 `offset_y_mm: 0` |
+| 后端预览 | `POST /api/preview` 请求体含 `offset_x_mm: 10`、`offset_y_mm: 3` → 仍返回 **400 × 240** PNG（位图高度不变），弹窗正常显示 |
+| 打印请求 | 用 mock 的 `/api/print` 捕获请求体：含 `offset_x_mm: 10`、`offset_y_mm: -2` 与 `copies`，toast「打印任务已发送」；**未触发真机出纸** |
 | 几何上限 | 50mm 标签 + 20mm 偏移 = 70mm/560dot → 属性面板黄色告警「超过 400px 位图上限…」 |
 | 离线降级 | 拦截后端请求 → 预览弹窗「无法连接后端服务…」+「重试」，状态栏「后端未启动」，无白屏 |
 | 控制台 | 无 Vue / JS 运行时异常（后端离线时的 `ERR_CONNECTION_REFUSED` 网络日志属预期） |

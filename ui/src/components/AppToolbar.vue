@@ -176,20 +176,20 @@ function onOffsetYChange(event) {
       </select>
     </label>
 
-    <div class="toolbar-spacer"></div>
-
-    <button class="btn btn-ghost" title="调用后端生成 PNG 预览" @click="openPreview()">
-      <AppIcon name="preview" :size="16" />
-      <span>预览</span>
-    </button>
-    <button
-      class="btn btn-primary"
-      :disabled="state.printing"
-      title="调用后端打印（份数 = 上方数值）"
-      @click="printLabel()"
-    >
-      <AppIcon :name="state.printing ? 'refresh' : 'print'" :size="16" :class="{ spin: state.printing }" />
-      <span>{{ state.printing ? '打印中…' : '打印' }}</span>
-    </button>
+    <div class="toolbar-actions">
+      <button class="btn btn-ghost" title="调用后端生成 PNG 预览" @click="openPreview()">
+        <AppIcon name="preview" :size="16" />
+        <span>预览</span>
+      </button>
+      <button
+        class="btn btn-primary"
+        :disabled="state.printing"
+        title="调用后端打印（份数 = 上方数值）"
+        @click="printLabel()"
+      >
+        <AppIcon :name="state.printing ? 'refresh' : 'print'" :size="16" :class="{ spin: state.printing }" />
+        <span>{{ state.printing ? '打印中…' : '打印' }}</span>
+      </button>
+    </div>
   </header>
 </template>

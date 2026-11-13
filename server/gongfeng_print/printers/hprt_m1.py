@@ -165,7 +165,8 @@ def _snap_align(align: Any) -> str:
 def build_stream(image: Image.Image, *, package_size: int = PACKAGE_SIZE,
                  density: int = 75, align: str = "left",
                  paper_type: int | None = 2,
-                 form_feed: bool = False) -> StreamInfo:
+                 form_feed: bool = False,
+                 vendor_flow: bool = False) -> StreamInfo:
     """把位图编码成一整套 ESC/POLI 指令流（含全部 GS v00 帧）。"""
     raw, wbytes, rows = image_to_raster(image)
     parts: list[bytes] = []
@@ -183,9 +184,14 @@ def build_stream(image: Image.Image, *, package_size: int = PACKAGE_SIZE,
             continue
         parts.append(frame(chunk[: chunk_rows * wbytes], wbytes, chunk_rows))
         frames += 1
-    parts.append(CMD_START_PRINT)
-    if form_feed:
+    # 厂商 App 的 ESC/POLI 流程是在位图后直接发 setPollForm(960)（GS f），
+    # 由固件完成"走到缝隙/回退对位/打印"；我们另有 1B 1B 01 5A 00 触发方式。
+    if vendor_flow:
         parts.append(CMD_FEED_960)
+    else:
+        parts.append(CMD_START_PRINT)
+        if form_feed:
+            parts.append(CMD_FEED_960)
     return StreamInfo(stream=b"".join(parts), row_bytes=wbytes, rows=rows,
                       frames=frames, package_size=int(package_size))
 

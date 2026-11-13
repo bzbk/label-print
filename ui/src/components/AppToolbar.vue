@@ -10,6 +10,7 @@ import {
   printLabel,
   saveJson,
   setPreset,
+  showToast,
   state,
   updateDoc,
 } from '../stores/store'
@@ -100,7 +101,15 @@ function onTrimChange(event) {
     <span class="toolbar-sep" aria-hidden="true"></span>
 
     <label class="toolbar-field">
-      <span>标签</span>
+      <span class="toolbar-label-with-tip">
+        标签
+        <span
+          class="info-dot info-dot--dark"
+          title="顶部 4mm 为不可打印区（硬件打印不到），元素 Y 坐标从 4mm 起算"
+          @click.stop.prevent="showToast('顶部 4mm 为不可打印区（硬件打印不到），元素 Y 坐标从 4mm 起算', 'warn', 4200)"
+          >i</span
+        >
+      </span>
       <select v-model="presetValue" title="标签尺寸预设">
         <option v-for="preset in LABEL_PRESETS" :key="preset.id" :value="preset.id">
           {{ preset.label }}
@@ -144,7 +153,7 @@ function onTrimChange(event) {
 
     <label
       class="toolbar-field"
-      title="固件不支持反向走纸；此值 = 打印后少走多少 mm，等效回退；40×30 标签建议 2mm。打印时实际只下发 (标签高度 - trim) 行，预览仍为完整图像。"
+      title="固件不支持反向走纸；此值 = 打印后少走多少 mm，等效回退。默认 0（打印流程已自动走到下一张缝隙）；如撕纸位置有偏差可手动调到 1~2mm。"
     >
       <span>底部少走</span>
       <input

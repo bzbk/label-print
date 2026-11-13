@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import AppIcon from './AppIcon.vue'
-import { DENSITIES, LABEL_PRESETS, SYMBOLOGIES, TYPE_LABELS, itemBoxMm } from '../label'
+import { DENSITIES, LABEL_PRESETS, SYMBOLOGIES, TOP_MARGIN_MM, TYPE_LABELS, itemBoxMm } from '../label'
 import {
   copySpecJson,
   duplicateItem,
@@ -109,9 +109,10 @@ function onPresetChange(event) {
           />
         </label>
         <label class="field">
-          Y（mm）
+          Y（mm · ≥{{ TOP_MARGIN_MM }}）
           <input
             type="number"
+            :min="TOP_MARGIN_MM"
             step="0.1"
             :value="item.y_mm"
             @change="patchItem({ y_mm: numberValue($event, item.y_mm) })"
@@ -261,6 +262,10 @@ function onPresetChange(event) {
           />
         </label>
       </div>
+      <p class="readout readout--info">
+        顶部 {{ TOP_MARGIN_MM }} mm 为不可打印区（硬件打印不到）：元素 Y 坐标从
+        {{ TOP_MARGIN_MM }} mm 起算，新增 / 拖拽 / 输入都会自动限制在 {{ TOP_MARGIN_MM }} mm 以下。
+      </p>
       <label class="field field--stack">
         尺寸预设
         <select :value="presetId" @change="onPresetChange">
@@ -320,7 +325,7 @@ function onPresetChange(event) {
           底部少走（mm）
           <span
             class="info-dot"
-            title="固件不支持反向走纸；此值 = 打印后少走多少 mm，等效回退；40×30 标签建议 2mm。打印时实际只下发 (标签高度 - trim) 行，预览仍为完整图像。"
+            title="固件不支持反向走纸；此值 = 打印后少走多少 mm，等效回退。默认 0（打印流程已自动走到下一张缝隙）；如撕纸位置有偏差可手动调到 1~2mm。打印时只下发 (标签高度 - trim) 行，预览仍为完整图像。"
             >i</span
           >
         </span>

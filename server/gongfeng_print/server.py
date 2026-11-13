@@ -332,6 +332,32 @@ class Api:
 
         threading.Thread(target=worker, name="status-refresh", daemon=True).start()
 
+    def scan(self, seconds: float = 8.0) -> dict[str, Any]:
+        """主动扫描蓝牙设备（App 的"扫描打印机"用）并返回设备列表。"""
+        try:
+            from .transport.spp import _bluetoothctl
+            _bluetoothctl(["scan", "on"], timeout=max(3.0, min(float(seconds), 20.0)))
+        except Exception:  # noqa: BLE001
+            pass
+        payload = self.devices()
+        payload["scanned"] = True
+        return payload
+
+    def connect_addr(self, addr: str) -> dict[str, Any]:
+        """连接指定地址的打印机并握手（App 的"连接"按钮用）。"""
+        try:
+            backend = self._backend(None, addr)
+            try:
+                backend.connect()
+                st = backend.status()
+                return {"ok": True, "addr": getattr(backend, "addr", addr),
+                        "model": backend.model_id, "status": st.summary,
+                        "value": st.value, "errors": list(st.errors)}
+            finally:
+                backend.close()
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "addr": addr, "error": str(exc)}
+
     def status(self, *, model: str | None = None,
                addr: str | None = None, force: bool = False) -> dict[str, Any]:
         """查询状态。命中缓存立即返回；缓存过期则返回旧值并在后台刷新。
@@ -741,6 +767,15 @@ class ApiHandler(BaseHTTPRequestHandler):
             self._send_json(self.api.models())
         elif path == "/api/devices":
             self._send_json(self.api.devices())
+        elif path == "/api/scan":
+            seconds = float(_first(query, "seconds") or 8.0)
+            self._send_json(self.api.scan(seconds))
+        elif path == "/api/connect":
+            payload = self._read_json()
+            addr = (payload or {}).get("addr") if isinstance(payload, dict) else None
+            if not addr:
+                raise ApiError("缺少 addr（打印机蓝牙地址）", 400)
+            self._send_json(self.api.connect_addr(str(addr)))
         elif path == "/api/status":
             self._send_json(self.api.status(
                 model=_first(query, "model"), addr=_first(query, "addr"),
@@ -786,6 +821,12 @@ class ApiHandler(BaseHTTPRequestHandler):
             if not addr:
                 addr = _first(query, "addr")
             self._send_json(self.api.learn(model=model, addr=addr))
+        elif path == "/api/connect":
+            payload = self._read_json()
+            addr = (payload or {}).get("addr") if isinstance(payload, dict) else None
+            if not addr:
+                raise ApiError("缺少 addr（打印机蓝牙地址）", 400)
+            self._send_json(self.api.connect_addr(str(addr)))
         elif path == "/api/status":
             self._send_json(self.api.status(
                 model=_first(query, "model"), addr=_first(query, "addr"),

@@ -45,6 +45,12 @@ export const DENSITIES = [35, 55, 75, 95]
 export const TYPE_LABELS = { text: '文本', barcode: '条码', qr: '二维码' }
 
 /**
+ * 顶部禁止打印区：M1 硬件打印不到顶部约 4mm（40×30 标签 + 2mm 缝隙实测），
+ * 排版时元素 y 坐标从 4mm 起算，新增/拖拽/输入一律夹到 ≥ 4mm。
+ */
+export const TOP_MARGIN_MM = 4
+
+/**
  * 纸卷偏移：M1 纸筒挡板在左侧、纸仓 50mm，
  * 40mm 卷纸相对打印头原点整体右移 10mm；50mm 卷纸为 0。
  * 后端据此把内容绘制在打印头坐标 x=offset 之后，位图宽 = offset + width。
@@ -76,7 +82,7 @@ export function snapOffsetY(value) {
  * 打印时只下发 (标签高度 - trim) 行，预览仍是完整图像。
  * 范围 0 ~ 5mm，步进 0.5；40×30 标签实测 2mm 对齐撕纸梳。
  */
-export const TRIM_BOTTOM_MM = { default: 2, min: 0, max: 5, step: 0.5 }
+export const TRIM_BOTTOM_MM = { default: 0, min: 0, max: 5, step: 0.5 }
 
 export function snapTrimBottom(value) {
   const n = Number(value)
@@ -123,7 +129,7 @@ export function createItem(type, doc = createDoc(), patch = {}) {
       align: 'left',
       invert: false,
       x_mm: 2,
-      y_mm: 2,
+      y_mm: TOP_MARGIN_MM,
       ...patch,
     }
   }
@@ -145,7 +151,7 @@ export function createItem(type, doc = createDoc(), patch = {}) {
       data: 'https://gofor.example/label',
       size_mm: 14,
       x_mm: 2,
-      y_mm: 2,
+      y_mm: TOP_MARGIN_MM,
       ...patch,
     }
   }
@@ -229,24 +235,25 @@ export function itemOverflow(item, doc) {
 export function normalizeItemPosition(item, doc) {
   const box = itemBoxMm(item, doc)
   const maxX = Math.max(0, round1(doc.width_mm - Math.min(box.w_mm, doc.width_mm)))
-  const maxY = Math.max(0, round1(doc.height_mm - Math.min(box.h_mm, doc.height_mm)))
+  // 顶部 4mm 为硬件不可打印区：y 至少为 TOP_MARGIN_MM（元素过高时向下溢出并告警，而不是进入顶部禁区）
+  const maxY = Math.max(TOP_MARGIN_MM, round1(doc.height_mm - Math.min(box.h_mm, doc.height_mm)))
   item.x_mm = clamp(round1(Number(item.x_mm) || 0), 0, maxX)
-  item.y_mm = clamp(round1(Number(item.y_mm) || 0), 0, maxY)
+  item.y_mm = clamp(round1(Number(item.y_mm) || 0), TOP_MARGIN_MM, maxY)
   return item
 }
 
 /** 新增元素时按纵向顺序摆放（避开已有元素） */
 export function autoPlaceItem(item, doc) {
   const box = itemBoxMm(item, doc)
-  let y = 2
+  let y = TOP_MARGIN_MM
   for (const other of doc.items) {
     const otherBox = itemBoxMm(other, doc)
     y = Math.max(y, (Number(other.y_mm) || 0) + otherBox.h_mm + 1.5)
   }
-  const maxY = Math.max(0, doc.height_mm - box.h_mm)
+  const maxY = Math.max(TOP_MARGIN_MM, round1(doc.height_mm - box.h_mm))
   item.x_mm = 2
   if (item.x_mm + box.w_mm > doc.width_mm) item.x_mm = 0
-  item.y_mm = round1(Math.min(y, maxY))
+  item.y_mm = round1(clamp(y, TOP_MARGIN_MM, maxY))
   return item
 }
 
@@ -391,8 +398,8 @@ export function templateDoc(name = 'material') {
       border: true,
       density: 75,
       items: [
-        createItem('text', null, { text: '收件城市：上海', size: 20, bold: true, x_mm: 2, y_mm: 2 }),
-        createItem('text', null, { text: '运单号 SF1234567890', size: 14, x_mm: 2, y_mm: 7.5 }),
+        createItem('text', null, { text: '收件城市：上海', size: 20, bold: true, x_mm: 2, y_mm: TOP_MARGIN_MM }),
+        createItem('text', null, { text: '运单号 SF1234567890', size: 14, x_mm: 2, y_mm: 9.5 }),
         createItem('barcode', null, {
           data: 'SF1234567890',
           symbology: 'code128',
@@ -415,8 +422,8 @@ export function templateDoc(name = 'material') {
     border: false,
     density: 75,
     items: [
-      createItem('text', null, { text: '物料 A', size: 22, bold: true, x_mm: 2, y_mm: 2 }),
-      createItem('text', null, { text: '规格 24×18 mm', size: 15, x_mm: 2, y_mm: 7.5 }),
+      createItem('text', null, { text: '物料 A', size: 22, bold: true, x_mm: 2, y_mm: TOP_MARGIN_MM }),
+      createItem('text', null, { text: '规格 24×18 mm', size: 15, x_mm: 2, y_mm: 9.5 }),
       createItem('barcode', null, {
         data: 'ABC123456',
         symbology: 'code128',

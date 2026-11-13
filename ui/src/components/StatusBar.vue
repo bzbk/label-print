@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { API_BASE } from '../api'
+import { TOP_MARGIN_MM } from '../label'
 import { learnPaper, refreshStatus, state } from '../stores/store'
 
 const phase = computed(() => state.backend.phase)
@@ -74,6 +75,7 @@ const dotHeight = computed(() => Math.round(state.doc.height_mm * 8))
 
     <div class="status-meta">
       <span>标签 <strong>{{ state.doc.width_mm }} × {{ state.doc.height_mm }} mm</strong></span>
+      <span>顶部留白 {{ TOP_MARGIN_MM }} mm</span>
       <span>偏移 {{ offsetMm }} mm</span>
       <span v-if="offsetY !== 0">垂直 {{ offsetY }} mm</span>
       <span>少走 {{ trimMm }} mm</span>

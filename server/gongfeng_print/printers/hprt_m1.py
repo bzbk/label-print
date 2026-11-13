@@ -392,7 +392,7 @@ class HprtM1Backend(PrinterBackend):
                     density: int = 75, align: str = "left",
                     auto_learn: bool = False, form_feed: bool = False,
                     flow: str = "frames", trim_bottom_mm: float = 0.0,
-                    post_feed_mm: float = 2.0, wait: float = 0.4) -> PrinterStatus:
+                    post_feed_mm: float = 0.0, wait: float = 0.4) -> PrinterStatus:
         if image.width > self.capabilities.head_dots + 16:
             raise BackendError(
                 f"位图宽度 {image.width}px 超过 M1 允许的 "

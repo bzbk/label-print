@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import AppIcon from './AppIcon.vue'
-import { DENSITIES, LABEL_PRESETS, SYMBOLOGIES, TOP_MARGIN_MM, TYPE_LABELS, itemBoxMm } from '../label'
+import { DENSITIES, LABEL_PRESETS, SYMBOLOGIES, TYPE_LABELS, itemBoxMm } from '../label'
 import {
   copySpecJson,
   duplicateItem,
@@ -109,10 +109,9 @@ function onPresetChange(event) {
           />
         </label>
         <label class="field">
-          Y（mm · ≥{{ TOP_MARGIN_MM }}）
+          Y（mm）
           <input
             type="number"
-            :min="TOP_MARGIN_MM"
             step="0.1"
             :value="item.y_mm"
             @change="patchItem({ y_mm: numberValue($event, item.y_mm) })"
@@ -262,10 +261,6 @@ function onPresetChange(event) {
           />
         </label>
       </div>
-      <p class="readout readout--info">
-        顶部 {{ TOP_MARGIN_MM }} mm 为不可打印区（硬件打印不到）：元素 Y 坐标从
-        {{ TOP_MARGIN_MM }} mm 起算，新增 / 拖拽 / 输入都会自动限制在 {{ TOP_MARGIN_MM }} mm 以下。
-      </p>
       <label class="field field--stack">
         尺寸预设
         <select :value="presetId" @change="onPresetChange">

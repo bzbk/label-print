@@ -332,6 +332,34 @@ class Api:
 
         threading.Thread(target=worker, name="status-refresh", daemon=True).start()
 
+    def set_printer_params(self, start_pos_mm: float | None = None,
+                           feed_after_pos_mm: float | None = None,
+                           addr: str | None = None) -> dict[str, Any]:
+        """写入打印机参数（官方 setkey）：207=起始打印位置, 208=定位后走纸长度（可负）。
+
+        12 units/mm；写入会触发固件重新定位，可能走掉几张纸，属正常。
+        """
+        from .printers import hprt_m1 as M1
+        written: list[str] = []
+        try:
+            backend = self._backend(None, addr)
+            try:
+                backend.connect()
+                if start_pos_mm is not None:
+                    val = int(round(float(start_pos_mm) * 12))
+                    backend._write(M1.setkey_cmd(207, val, 1), gap=0.15)
+                    written.append(f"207={start_pos_mm}mm({val})")
+                if feed_after_pos_mm is not None:
+                    val = int(round(float(feed_after_pos_mm) * 12))
+                    backend._write(M1.setkey_cmd(208, val, 2), gap=0.15)
+                    written.append(f"208={feed_after_pos_mm}mm({val})")
+                return {"ok": True, "written": written,
+                        "addr": getattr(backend, "addr", addr)}
+            finally:
+                backend.close()
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": str(exc), "written": written}
+
     def scan(self, seconds: float = 8.0) -> dict[str, Any]:
         """主动扫描蓝牙设备（App 的"扫描打印机"用）并返回设备列表。"""
         try:
@@ -536,7 +564,7 @@ class Api:
             for _ in range(n):
                 st = backend.print_image(
                     image, copies=1, density=spec.density,
-                    align=spec.align, auto_learn=spec.auto_learn,
+                    align=spec.align, auto_learn=False,
                     form_feed=spec.form_feed, trim_bottom_mm=spec.trim_bottom_mm)
                 time.sleep(0.8)
             return st
@@ -827,6 +855,17 @@ class ApiHandler(BaseHTTPRequestHandler):
             if not addr:
                 raise ApiError("缺少 addr（打印机蓝牙地址）", 400)
             self._send_json(self.api.connect_addr(str(addr)))
+        elif path == "/api/printer/params":
+            payload = self._read_json()
+            if not isinstance(payload, dict):
+                raise ApiError("请求体必须是 JSON 对象", 400)
+            def _f(name):
+                v = payload.get(name)
+                return None if v is None else float(v)
+            self._send_json(self.api.set_printer_params(
+                start_pos_mm=_f("start_pos_mm"),
+                feed_after_pos_mm=_f("feed_after_pos_mm"),
+                addr=payload.get("addr")))
         elif path == "/api/status":
             self._send_json(self.api.status(
                 model=_first(query, "model"), addr=_first(query, "addr"),

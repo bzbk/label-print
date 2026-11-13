@@ -10,7 +10,6 @@ import {
   printLabel,
   saveJson,
   setPreset,
-  showToast,
   state,
   updateDoc,
 } from '../stores/store'
@@ -101,15 +100,7 @@ function onTrimChange(event) {
     <span class="toolbar-sep" aria-hidden="true"></span>
 
     <label class="toolbar-field">
-      <span class="toolbar-label-with-tip">
-        标签
-        <span
-          class="info-dot info-dot--dark"
-          title="顶部 4mm 为不可打印区（硬件打印不到），元素 Y 坐标从 4mm 起算"
-          @click.stop.prevent="showToast('顶部 4mm 为不可打印区（硬件打印不到），元素 Y 坐标从 4mm 起算', 'warn', 4200)"
-          >i</span
-        >
-      </span>
+      <span>标签</span>
       <select v-model="presetValue" title="标签尺寸预设">
         <option v-for="preset in LABEL_PRESETS" :key="preset.id" :value="preset.id">
           {{ preset.label }}

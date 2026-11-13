@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import LabelElement from './LabelElement.vue'
-import { TOP_MARGIN_MM, itemBoxMm } from '../label'
+import { itemBoxMm } from '../label'
 import { DOT_PER_MM, clamp, round1 } from '../units'
 import { clearSelection, selectItem, state } from '../stores/store'
 
@@ -19,8 +19,6 @@ const offsetY = computed(() => Number(doc.value.offset_y_mm) || 0)
 const absOffsetY = computed(() => Math.abs(offsetY.value))
 /** 底部少走：打印时不下发的底部区域（固件不支持反向走纸，用少走等效回退） */
 const trimMm = computed(() => Number(doc.value.trim_bottom_mm) || 0)
-/** 顶部不可打印区：硬件打印不到顶部 4mm */
-const topMarginPx = computed(() => TOP_MARGIN_MM * DOT_PER_MM * zoom.value)
 const trimPx = computed(() => trimMm.value * DOT_PER_MM * zoom.value)
 const printHeightMm = computed(() => Math.max(0, round1(doc.value.height_mm - trimMm.value)))
 const totalMm = computed(() => round1(doc.value.width_mm + offsetMm.value))
@@ -120,7 +118,7 @@ function onItemPointerDown(event, item) {
     startX: Number(item.x_mm) || 0,
     startY: Number(item.y_mm) || 0,
     maxX: Math.max(0, round1(state.doc.width_mm - Math.min(box.w_mm, state.doc.width_mm))),
-    maxY: Math.max(TOP_MARGIN_MM, round1(state.doc.height_mm - Math.min(box.h_mm, state.doc.height_mm))),
+    maxY: Math.max(0, round1(state.doc.height_mm - Math.min(box.h_mm, state.doc.height_mm))),
   }
   window.addEventListener('pointermove', onPointerMove)
   window.addEventListener('pointerup', stopDrag, { once: true })
@@ -139,7 +137,7 @@ function onPointerMove(event) {
   const nextX = Math.round((drag.startX + dxMm) / step) * step
   const nextY = Math.round((drag.startY + dyMm) / step) * step
   item.x_mm = clamp(round1(nextX), 0, drag.maxX)
-  item.y_mm = clamp(round1(nextY), TOP_MARGIN_MM, drag.maxY)
+  item.y_mm = clamp(round1(nextY), 0, drag.maxY)
 }
 
 function stopDrag() {
@@ -245,15 +243,6 @@ onBeforeUnmount(() => {
               />
 
               <!-- 垂直微调：只在可能被裁切的一侧画一条虚线提示，不改变网格/元素坐标 -->
-              <!-- 顶部 4mm 硬件不可打印区：元素 y 一律 ≥ 4mm -->
-              <div
-                class="no-print-top"
-                :style="{ height: `${topMarginPx}px` }"
-                title="顶部 4mm 硬件打印不到：排版时禁止在顶部 4mm 放元素（元素 Y 坐标从 4mm 起算）"
-              >
-                <span class="trim-tag">顶部 {{ TOP_MARGIN_MM }} mm 硬件打印不到</span>
-              </div>
-
               <!-- 底部少走：打印时不下发 trim 区域（预览仍是完整图像，这里只做提示） -->
               <div
                 v-if="trimMm > 0"
@@ -298,7 +287,6 @@ onBeforeUnmount(() => {
             打印头坐标 0–{{ totalMm }} mm
             <span v-if="offsetY !== 0">· 垂直微调 {{ offsetY }} mm</span>
             <span v-if="trimMm > 0">· 底部少走 {{ trimMm }} mm（不打印）</span>
-            <span>· 顶部 {{ TOP_MARGIN_MM }} mm 不可打印</span>
           </div>
         </div>
       </div>

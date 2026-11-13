@@ -166,7 +166,7 @@ class LabelSpec:
     align: str = "left"
     copies: int = 1
     model: str | None = None
-    auto_learn: bool = True
+    auto_learn: bool = False
     form_feed: bool = False
     items: list[dict[str, Any]] = field(default_factory=list)
 
@@ -331,7 +331,7 @@ def parse_spec(payload: Any) -> LabelSpec:
 
     auto_learn = _as_bool(payload.get("no_auto_learn"), "no_auto_learn", False) is False
     if payload.get("auto_learn") is not None:
-        auto_learn = _as_bool(payload.get("auto_learn"), "auto_learn", True)
+        auto_learn = _as_bool(payload.get("auto_learn"), "auto_learn", False)
 
     return LabelSpec(
         width_mm=width,

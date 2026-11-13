@@ -73,6 +73,55 @@ function persistPrinter(printer) {
 
 const storedPrinter = readStoredPrinter()
 
+/* ------------------------------------------- 打印机参数（207/208）记忆 */
+
+const PRINTER_SETTINGS_STORAGE_KEY = 'gofor-label-printer-settings-v1'
+const PRINTER_PARAM_DEFAULTS = { start_pos_mm: 0, feed_after_pos_mm: -2 }
+const PRINTER_PARAM_RANGE = [-5, 5]
+
+function snapParamValue(value, fallback) {
+  const n = Number(value)
+  const source = Number.isFinite(n) ? n : fallback
+  const snapped = Math.round(source / 0.5) * 0.5
+  return round1(clamp(snapped, PRINTER_PARAM_RANGE[0], PRINTER_PARAM_RANGE[1]))
+}
+
+function readStoredPrinterSettings() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return { ...PRINTER_PARAM_DEFAULTS }
+    const raw = window.localStorage.getItem(PRINTER_SETTINGS_STORAGE_KEY)
+    if (!raw) return { ...PRINTER_PARAM_DEFAULTS }
+    const data = JSON.parse(raw)
+    if (!data || typeof data !== 'object') return { ...PRINTER_PARAM_DEFAULTS }
+    return {
+      start_pos_mm: snapParamValue(data.start_pos_mm, PRINTER_PARAM_DEFAULTS.start_pos_mm),
+      feed_after_pos_mm: snapParamValue(data.feed_after_pos_mm, PRINTER_PARAM_DEFAULTS.feed_after_pos_mm),
+    }
+  } catch {
+    return { ...PRINTER_PARAM_DEFAULTS }
+  }
+}
+
+function persistPrinterSettings(params) {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return
+    window.localStorage.setItem(
+      PRINTER_SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        start_pos_mm: snapParamValue(params.start_pos_mm, PRINTER_PARAM_DEFAULTS.start_pos_mm),
+        feed_after_pos_mm: snapParamValue(
+          params.feed_after_pos_mm,
+          PRINTER_PARAM_DEFAULTS.feed_after_pos_mm,
+        ),
+      }),
+    )
+  } catch {
+    /* localStorage 不可用时忽略 */
+  }
+}
+
+const storedPrinterSettings = readStoredPrinterSettings()
+
 export const state = reactive({
   // 首次打开给一份可编辑的示例标签，便于直接看到 40×30 的真实排版效果；
   // 「新建」会得到空白标签。
@@ -106,6 +155,15 @@ export const state = reactive({
     statusLabel: '',
     error: '',
     lastConnectedAt: 0,
+  },
+  /** 打印机设置（写入设备）：207 起始打印位置 / 208 定位后走纸长度 */
+  printerParams: {
+    start_pos_mm: storedPrinterSettings.start_pos_mm,
+    feed_after_pos_mm: storedPrinterSettings.feed_after_pos_mm,
+    writing: false,
+    written: [],
+    error: '',
+    lastWrittenAt: 0,
   },
   /** 打印机扫描/选择弹窗 */
   printerDialog: {
@@ -689,6 +747,53 @@ export async function connectPrinter(target) {
     return null
   } finally {
     dialog.connectingAddr = ''
+  }
+}
+
+export function setPrinterParam(key, value) {
+  if (!(key in PRINTER_PARAM_DEFAULTS)) return
+  state.printerParams[key] = snapParamValue(value, PRINTER_PARAM_DEFAULTS[key])
+}
+
+/**
+ * POST /api/printer/params — 写入设备参数（207 起始位置 / 208 定位后走纸）。
+ * 只写入选中的打印机；成功后持久化到 localStorage（不参与打印请求）。
+ */
+export async function writePrinterParams() {
+  const params = state.printerParams
+  if (params.writing) return false
+  if (!state.printer.addr) {
+    showToast('请先选择打印机', 'warn', 4500)
+    openPrinterDialog()
+    return false
+  }
+  params.writing = true
+  params.error = ''
+  params.written = []
+  try {
+    const result = await api.writePrinterParams({
+      addr: state.printer.addr,
+      start_pos_mm: params.start_pos_mm,
+      feed_after_pos_mm: params.feed_after_pos_mm,
+    })
+    if (!result || result.ok === false) {
+      throw new Error(
+        firstString(result?.error, result?.message) || '写入打印机参数失败',
+      )
+    }
+    params.written = Array.isArray(result.written) ? result.written.map(String) : []
+    params.lastWrittenAt = Date.now()
+    persistPrinterSettings(params)
+    showToast('已写入打印机', 'success', 3500)
+    window.setTimeout(() => refreshStatus(), 1800)
+    return true
+  } catch (error) {
+    params.error = error.message || String(error)
+    showToast(`写入失败：${params.error}`, 'error', 7000)
+    markBackendOffline(error)
+    return false
+  } finally {
+    params.writing = false
   }
 }
 

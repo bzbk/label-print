@@ -172,6 +172,15 @@ export function printLabel(spec) {
   return request('/api/print', { method: 'POST', body: spec, timeout: 25000 })
 }
 
+/** POST /api/printer/params — 写入打印机参数（207 起始位置 / 208 定位后走纸） */
+export function writePrinterParams(payload) {
+  return request('/api/printer/params', {
+    method: 'POST',
+    body: payload,
+    timeout: 30000,
+  })
+}
+
 /** POST /api/learn — 测纸 / 定位；addr 指定目标打印机 */
 export function learnPaper(addr) {
   return request('/api/learn', {
@@ -190,4 +199,5 @@ export const api = {
   fetchPreview,
   printLabel,
   learnPaper,
+  writePrinterParams,
 }

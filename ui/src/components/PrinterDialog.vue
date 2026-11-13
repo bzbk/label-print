@@ -11,12 +11,19 @@ import {
   printerModelLabel,
   refreshStatus,
   scanPrinters,
+  setPrinterParam,
   state,
+  writePrinterParams,
 } from '../stores/store'
 
 const dialog = computed(() => state.printerDialog)
 const printer = computed(() => state.printer)
+const params = computed(() => state.printerParams)
 const connection = printerConnection
+
+function onParamChange(key, event) {
+  setPrinterParam(key, event.target.value)
+}
 
 const currentAddr = computed(() => (state.printer.addr || '').toUpperCase())
 const isScanning = computed(() => dialog.value.scanning)
@@ -168,6 +175,64 @@ function connect(device) {
             <p>{{ isLoading ? '正在读取已知设备…' : '暂无设备。请确认打印机已开机，点击「扫描蓝牙设备」。' }}</p>
             <p class="printer-empty-hint">若从未配对，请先在系统蓝牙里配对一次，再扫描。</p>
           </div>
+
+          <section class="printer-settings">
+            <div class="printer-settings-head">
+              <h3>打印机设置（写入设备）</h3>
+              <span>官方 setkey 207 / 208 · 仅写入当前打印机</span>
+            </div>
+            <p class="printer-settings-warn">
+              <AppIcon name="warning" :size="14" />
+              <span>写入会触发打印机重新定位，可能走掉几张纸，属正常；208 建议 -2mm（40×30 标签）。</span>
+            </p>
+            <div class="printer-settings-grid">
+              <label class="field">
+                起始打印位置 207（mm）
+                <input
+                  type="number"
+                  min="-5"
+                  max="5"
+                  step="0.5"
+                  :value="params.start_pos_mm"
+                  :disabled="params.writing"
+                  @change="onParamChange('start_pos_mm', $event)"
+                />
+              </label>
+              <label class="field">
+                定位后走纸长度 208（mm）
+                <input
+                  type="number"
+                  min="-5"
+                  max="5"
+                  step="0.5"
+                  :value="params.feed_after_pos_mm"
+                  :disabled="params.writing"
+                  @change="onParamChange('feed_after_pos_mm', $event)"
+                />
+              </label>
+            </div>
+            <div class="printer-settings-actions">
+              <button
+                class="btn btn-primary"
+                :disabled="params.writing || !state.printer.addr"
+                @click="writePrinterParams()"
+              >
+                <AppIcon :name="params.writing ? 'refresh' : 'save'" :size="14" :class="{ spin: params.writing }" />
+                <span>{{ params.writing ? '写入中…' : '写入设备' }}</span>
+              </button>
+              <span v-if="!state.printer.addr" class="printer-settings-hint">
+                请先在上方选择并连接打印机
+              </span>
+              <span v-else class="printer-settings-hint">
+                已选：{{ state.printer.name || state.printer.addr }}；写入后回填并持久化
+              </span>
+            </div>
+            <p v-if="params.written.length" class="printer-settings-ok">
+              <AppIcon name="check" :size="13" />
+              <span>已写入：{{ params.written.join('，') }}</span>
+            </p>
+            <p v-if="params.error" class="printer-settings-error">{{ params.error }}</p>
+          </section>
         </div>
 
         <footer class="modal-foot">

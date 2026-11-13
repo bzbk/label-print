@@ -165,7 +165,8 @@ def zint_png(symbology: str, data: str, *, target_px: int,
         # 2) 整数模块宽度：默认 2px（203dpi 下约 0.25mm X-dim），
         #    可用宽度放不下时退到 1px，仍放不下则由上层等比缩小。
         room = int(target_px) // modules if modules else 0
-        module_px = 2 if room >= 2 else 1
+        # 整数模块宽度：203dpi 下 2px≈0.25mm（推荐），最多 4px；放不下时退到 1px
+        module_px = max(1, min(4, room))
         # 条码总高 = module_px * (height_units + 8*show_text)
         h_units = max(1, target_total // module_px - (8 if show_text else 0))
         img = _zint_raw(sid, data, scale=module_px / 2, height=h_units,
@@ -266,7 +267,9 @@ def _render_content(spec: LabelSpec, dpi: int = DPI) -> Image.Image:
             pic = zint_png(item["symbology"], str(item["data"]),
                            target_px=avail_w, height_mm=height_mm,
                            show_text=bool(item.get("show_text", True)))
-            pic = _fit_nearest(pic, avail_w, max(1, H - int(y0)))
+            while pic.width > avail_w and pic.width > 1:
+                pic = pic.resize((max(1, pic.width // 2), max(1, pic.height // 2)),
+                                 Image.NEAREST)
             if x_abs is not None:
                 px = x0
             elif align == "right":
@@ -282,7 +285,9 @@ def _render_content(spec: LabelSpec, dpi: int = DPI) -> Image.Image:
         if kind == "qr":
             side = mm_to_px(item.get("size_mm", 14.0), dpi)
             pic = zint_png("qr", str(item["data"]), target_px=side)
-            pic = _fit_nearest(pic, side, max(1, H - int(y0)))
+            while pic.width > side and pic.width > 1:
+                pic = pic.resize((max(1, pic.width // 2), max(1, pic.height // 2)),
+                                 Image.NEAREST)
             if x_abs is not None:
                 px = x0
             elif align == "right":

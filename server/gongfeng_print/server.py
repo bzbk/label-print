@@ -332,6 +332,39 @@ class Api:
 
         threading.Thread(target=worker, name="status-refresh", daemon=True).start()
 
+    def print_image(self, data: bytes, *, width_mm: float = 40.0,
+                    height_mm: float = 30.0, offset_x_mm: float = 10.0,
+                    copies: int = 1, density: int = 75, align: str = "left",
+                    addr: str | None = None) -> dict[str, Any]:
+        """打印一张上传的图片（PNG/JPEG；SVG 由前端栅格化后上传）。"""
+        import io as _io
+        from PIL import Image as _Image
+        from .render import mm_to_px
+        try:
+            src = _Image.open(_io.BytesIO(data)).convert("RGB")
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": f"图片解析失败：{exc}"}
+        W, H = mm_to_px(width_mm), mm_to_px(height_mm)
+        off = mm_to_px(offset_x_mm)
+        canvas = _Image.new("RGB", (off + W, H), "white")
+        ratio = min(W / src.width, H / src.height)
+        resized = src.resize((max(1, int(src.width * ratio)),
+                              max(1, int(src.height * ratio))), _Image.LANCZOS)
+        canvas.paste(resized, (off + (W - resized.width) // 2,
+                               (H - resized.height) // 2))
+        def do_print(backend):
+            return backend.print_image(canvas, copies=max(1, min(int(copies), 99)),
+                                       density=int(density), align=align,
+                                       auto_learn=False, form_feed=False)
+        try:
+            backend, st = self._run_device("print", None, addr, do_print)
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": str(exc), "width_px": canvas.width,
+                    "height_px": canvas.height}
+        return {"ok": st.ok, "status": st.summary, "value": st.value,
+                "errors": list(st.errors), "width_px": canvas.width,
+                "height_px": canvas.height, "offset_x_mm": offset_x_mm}
+
     def set_printer_params(self, start_pos_mm: float | None = None,
                            feed_after_pos_mm: float | None = None,
                            addr: str | None = None) -> dict[str, Any]:
@@ -866,6 +899,21 @@ class ApiHandler(BaseHTTPRequestHandler):
                 start_pos_mm=_f("start_pos_mm"),
                 feed_after_pos_mm=_f("feed_after_pos_mm"),
                 addr=payload.get("addr")))
+        elif path == "/api/print/image":
+            body = self._read_body()
+            if not body:
+                raise ApiError("请求体为空（需上传 PNG/JPEG 二进制）", 400)
+            q = {k: _first(query, k) for k in
+                 ("width_mm", "height_mm", "offset_x_mm", "copies", "density", "align", "addr")}
+            self._send_json(self.api.print_image(
+                body,
+                width_mm=float(q["width_mm"] or 40.0),
+                height_mm=float(q["height_mm"] or 30.0),
+                offset_x_mm=float(q["offset_x_mm"] or 10.0),
+                copies=int(float(q["copies"] or 1)),
+                density=int(float(q["density"] or 75)),
+                align=q["align"] or "left",
+                addr=q["addr"]))
         elif path == "/api/status":
             self._send_json(self.api.status(
                 model=_first(query, "model"), addr=_first(query, "addr"),

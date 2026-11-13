@@ -3,6 +3,7 @@
 
 示例::
 
+    # Part-DB 链接格式：零件 /part/<id>，库位 /store_location/<id>/parts
     python3 tools/html_label.py --template templates/box_label.html \
         --data '{"NAME":"空白标准盒004","SHORT":"端子线","DESC":"MX1.25 / SH1.0 等","TYPE":"端子线","ID":"130"}' \
         --qr "https://part.gofor.ltd/storage_location/130" --preview /tmp/box.png --print

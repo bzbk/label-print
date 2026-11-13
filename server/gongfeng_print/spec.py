@@ -43,6 +43,9 @@ DEFAULT_OFFSET_X_MM = 10.0
 MIN_OFFSET_X_MM, MAX_OFFSET_X_MM = 0.0, 20.0
 DEFAULT_OFFSET_Y_MM = 0.0
 MIN_OFFSET_Y_MM, MAX_OFFSET_Y_MM = -15.0, 15.0
+# 底部少走量：打印后的净前进 = 标签高度 - trim（等效“打印后回退”，固件不支持负走纸）
+DEFAULT_TRIM_BOTTOM_MM = 2.0
+MIN_TRIM_BOTTOM_MM, MAX_TRIM_BOTTOM_MM = 0.0, 5.0
 OFFSET_STEP_MM = 0.5
 MAX_COPIES = 99
 MAX_ITEMS = 200
@@ -157,6 +160,7 @@ class LabelSpec:
     height_mm: float = DEFAULT_HEIGHT_MM
     offset_x_mm: float = DEFAULT_OFFSET_X_MM
     offset_y_mm: float = DEFAULT_OFFSET_Y_MM
+    trim_bottom_mm: float = DEFAULT_TRIM_BOTTOM_MM
     border: bool = False
     density: int = DEFAULT_DENSITY
     align: str = "left"
@@ -199,6 +203,7 @@ class LabelSpec:
             "offset_x_px": self.offset_x_px,
             "offset_y_mm": self.offset_y_mm,
             "offset_y_px": self.offset_y_px,
+            "trim_bottom_mm": self.trim_bottom_mm,
             "canvas_width_px": self.canvas_width_px,
             "border": self.border,
             "density": self.density,
@@ -316,6 +321,11 @@ def parse_spec(payload: Any) -> LabelSpec:
     offset_y_mm = round(offset_y_mm / OFFSET_STEP_MM) * OFFSET_STEP_MM
     offset_y_mm = round(min(MAX_OFFSET_Y_MM, max(MIN_OFFSET_Y_MM, offset_y_mm)), 3)
 
+    trim_bottom_mm = _as_float(payload.get("trim_bottom_mm"), "trim_bottom_mm",
+                               DEFAULT_TRIM_BOTTOM_MM, MIN_TRIM_BOTTOM_MM, MAX_TRIM_BOTTOM_MM)
+    trim_bottom_mm = round(trim_bottom_mm / OFFSET_STEP_MM) * OFFSET_STEP_MM
+    trim_bottom_mm = round(min(MAX_TRIM_BOTTOM_MM, max(MIN_TRIM_BOTTOM_MM, trim_bottom_mm)), 3)
+
     model = payload.get("model")
     model = str(model).strip().lower() if isinstance(model, str) and model.strip() else None
 
@@ -328,6 +338,7 @@ def parse_spec(payload: Any) -> LabelSpec:
         height_mm=height,
         offset_x_mm=offset_x_mm,
         offset_y_mm=offset_y_mm,
+        trim_bottom_mm=trim_bottom_mm,
         border=_as_bool(payload.get("border"), "border", False),
         density=snap_density(payload.get("density")),
         align=normalize_align(payload.get("align")),

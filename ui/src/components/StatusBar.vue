@@ -48,6 +48,7 @@ const lastCheckText = computed(() => {
 
 const offsetMm = computed(() => Number(state.doc.offset_x_mm) || 0)
 const offsetY = computed(() => Number(state.doc.offset_y_mm) || 0)
+const trimMm = computed(() => Number(state.doc.trim_bottom_mm) || 0)
 // 位图宽 = 纸卷偏移 + 标签宽（40mm 纸 + 10mm 偏移 = 400 dot）
 const dotWidth = computed(() => Math.round((state.doc.width_mm + offsetMm.value) * 8))
 const dotHeight = computed(() => Math.round(state.doc.height_mm * 8))
@@ -75,6 +76,7 @@ const dotHeight = computed(() => Math.round(state.doc.height_mm * 8))
       <span>标签 <strong>{{ state.doc.width_mm }} × {{ state.doc.height_mm }} mm</strong></span>
       <span>偏移 {{ offsetMm }} mm</span>
       <span v-if="offsetY !== 0">垂直 {{ offsetY }} mm</span>
+      <span>少走 {{ trimMm }} mm</span>
       <span>位图 {{ dotWidth }} × {{ dotHeight }} dot</span>
       <span>元素 {{ state.doc.items.length }}</span>
       <span>缩放 {{ Math.round(state.zoom * 100) }}%</span>

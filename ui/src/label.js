@@ -71,11 +71,26 @@ export function snapOffsetY(value) {
   return round1(clamp(snapped, OFFSET_Y_MM.min, OFFSET_Y_MM.max))
 }
 
+/**
+ * 底部少走：固件不支持反向走纸，「打印后回退」用「少走」等效实现。
+ * 打印时只下发 (标签高度 - trim) 行，预览仍是完整图像。
+ * 范围 0 ~ 5mm，步进 0.5；40×30 标签实测 2mm 对齐撕纸梳。
+ */
+export const TRIM_BOTTOM_MM = { default: 2, min: 0, max: 5, step: 0.5 }
+
+export function snapTrimBottom(value) {
+  const n = Number(value)
+  const source = Number.isFinite(n) ? n : TRIM_BOTTOM_MM.default
+  const snapped = Math.round(source / TRIM_BOTTOM_MM.step) * TRIM_BOTTOM_MM.step
+  return round1(clamp(snapped, TRIM_BOTTOM_MM.min, TRIM_BOTTOM_MM.max))
+}
+
 export const LIMITS = {
   width_mm: [10, 72],
   height_mm: [10, 300],
   offset_x_mm: [0, 20],
   offset_y_mm: [-15, 15],
+  trim_bottom_mm: [0, 5],
   textSize: [6, 120],
   barcodeHeight: [4, 40],
   qrSize: [6, 60],
@@ -89,6 +104,7 @@ export function createDoc(patch = {}) {
     border: false,
     offset_x_mm: OFFSET_X_MM.default,
     offset_y_mm: OFFSET_Y_MM.default,
+    trim_bottom_mm: TRIM_BOTTOM_MM.default,
     density: 75,
     align: 'left',
     items: [],
@@ -299,6 +315,7 @@ export function toSpec(doc) {
     border: !!doc.border,
     offset_x_mm: snapOffsetX(doc.offset_x_mm ?? OFFSET_X_MM.default),
     offset_y_mm: snapOffsetY(doc.offset_y_mm ?? OFFSET_Y_MM.default),
+    trim_bottom_mm: snapTrimBottom(doc.trim_bottom_mm ?? TRIM_BOTTOM_MM.default),
     density: DENSITIES.includes(Number(doc.density)) ? Number(doc.density) : 75,
     items: doc.items.map(itemToSpec),
   }
@@ -329,6 +346,7 @@ export function fromSpec(raw) {
     border: !!raw.border,
     offset_x_mm: snapOffsetX(raw.offset_x_mm ?? OFFSET_X_MM.default),
     offset_y_mm: snapOffsetY(raw.offset_y_mm ?? OFFSET_Y_MM.default),
+    trim_bottom_mm: snapTrimBottom(raw.trim_bottom_mm ?? TRIM_BOTTOM_MM.default),
     density: DENSITIES.includes(Number(raw.density)) ? Number(raw.density) : 75,
     align: ['left', 'center', 'right'].includes(raw.align) ? raw.align : 'left',
     items: [],

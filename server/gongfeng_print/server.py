@@ -264,7 +264,7 @@ class Api:
         return backend
 
     def _run_device(self, name: str, model: str | None,
-                    addr: str | None, fn, wait: float = 0.0,
+                    addr: str | None, fn, wait: float = 30.0,
                     timeout: float | None = None, retries: int | None = None):
         model_id = (model or self.default_model).strip().lower()
         with self._device_operation(name, wait=wait):
@@ -507,7 +507,7 @@ class Api:
             return backend.print_image(
                 image, copies=spec.copies, density=spec.density,
                 align=spec.align, auto_learn=spec.auto_learn,
-                form_feed=spec.form_feed)
+                form_feed=spec.form_feed, trim_bottom_mm=spec.trim_bottom_mm)
 
         try:
             backend, st = self._run_device("print", model_id, addr, do_print)

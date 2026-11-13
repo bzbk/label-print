@@ -59,6 +59,10 @@ function onOffsetChange(event) {
 function onOffsetYChange(event) {
   updateDoc({ offset_y_mm: Number(event.target.value) })
 }
+
+function onTrimChange(event) {
+  updateDoc({ trim_bottom_mm: Number(event.target.value) })
+}
 </script>
 
 <template>
@@ -134,6 +138,23 @@ function onOffsetYChange(event) {
         step="0.5"
         :value="state.doc.offset_y_mm"
         @change="onOffsetYChange"
+      />
+      <span class="toolbar-suffix">mm</span>
+    </label>
+
+    <label
+      class="toolbar-field"
+      title="固件不支持反向走纸；此值 = 打印后少走多少 mm，等效回退；40×30 标签建议 2mm。打印时实际只下发 (标签高度 - trim) 行，预览仍为完整图像。"
+    >
+      <span>底部少走</span>
+      <input
+        class="toolbar-num"
+        type="number"
+        min="0"
+        max="5"
+        step="0.5"
+        :value="state.doc.trim_bottom_mm"
+        @change="onTrimChange"
       />
       <span class="toolbar-suffix">mm</span>
     </label>

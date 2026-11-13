@@ -36,6 +36,24 @@ const geometryWarning = computed(() =>
     : '',
 )
 
+const trimMm = computed(() => Number(state.doc.trim_bottom_mm) || 0)
+const printHeightMm = computed(
+  () => Math.round(Math.max(0, state.doc.height_mm - trimMm.value) * 10) / 10,
+)
+const contentBottomMm = computed(() => {
+  let bottom = 0
+  for (const entry of state.doc.items) {
+    const entryBox = itemBoxMm(entry, state.doc)
+    bottom = Math.max(bottom, (Number(entry.y_mm) || 0) + entryBox.h_mm)
+  }
+  return Math.round(bottom * 10) / 10
+})
+const trimWarning = computed(() =>
+  trimMm.value > 0 && contentBottomMm.value > state.doc.height_mm - trimMm.value + 0.05
+    ? `有内容伸入底部 ${trimMm.value} mm 不打印区域（内容底 ${contentBottomMm.value} mm > 打印边界 ${printHeightMm.value} mm），可用「垂直微调」上移内容，避免有效内容被裁。`
+    : '',
+)
+
 function fmt(value) {
   return (Math.round(Number(value) * 10) / 10).toFixed(1)
 }
@@ -297,6 +315,30 @@ function onPresetChange(event) {
         }}
         dot），超出标签的内容会被裁切。
       </p>
+      <label class="field field--stack">
+        <span class="field-label">
+          底部少走（mm）
+          <span
+            class="info-dot"
+            title="固件不支持反向走纸；此值 = 打印后少走多少 mm，等效回退；40×30 标签建议 2mm。打印时实际只下发 (标签高度 - trim) 行，预览仍为完整图像。"
+            >i</span
+          >
+        </span>
+        <input
+          type="number"
+          min="0"
+          max="5"
+          step="0.5"
+          :value="state.doc.trim_bottom_mm"
+          @change="updateDoc({ trim_bottom_mm: Number($event.target.value) })"
+        />
+      </label>
+      <p class="readout">
+        底部少走 = 打印后净前进少走 {{ trimMm }} mm（固件不支持负走纸，等效回退）。本次打印只下发
+        {{ printHeightMm }} mm（{{ Math.round(printHeightMm * 8) }} dot）的行；预览仍是完整
+        {{ state.doc.height_mm }} mm 图像，trim 区域不打印。
+      </p>
+      <p v-if="trimWarning" class="readout readout--warn">{{ trimWarning }}</p>
       <label class="field field--stack">
         打印对齐
         <select :value="state.doc.align" @change="updateDoc({ align: $event.target.value })">

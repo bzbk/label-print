@@ -164,11 +164,15 @@ def _snap_align(align: Any) -> str:
 
 def build_stream(image: Image.Image, *, package_size: int = PACKAGE_SIZE,
                  density: int = 75, align: str = "left",
-                 paper_type: int | None = 2,
+                 paper_type: int | None = 3,
                  form_feed: bool = False,
-                 vendor_flow: bool = False) -> StreamInfo:
+                 flow: str = "vendor", trim_bottom_mm: float = 0.0) -> StreamInfo:
     """把位图编码成一整套 ESC/POLI 指令流（含全部 GS v00 帧）。"""
     raw, wbytes, rows = image_to_raster(image)
+    if trim_bottom_mm > 0:
+        keep = max(1, rows - int(round(float(trim_bottom_mm) * 8)))
+        raw = raw[: keep * wbytes]
+        rows = keep
     parts: list[bytes] = []
     if paper_type is not None:
         parts.append(CMD_PAPER_TYPE + bytes([int(paper_type) & 0xFF]))
@@ -184,14 +188,22 @@ def build_stream(image: Image.Image, *, package_size: int = PACKAGE_SIZE,
             continue
         parts.append(frame(chunk[: chunk_rows * wbytes], wbytes, chunk_rows))
         frames += 1
-    # 厂商 App 的 ESC/POLI 流程是在位图后直接发 setPollForm(960)（GS f），
-    # 由固件完成"走到缝隙/回退对位/打印"；我们另有 1B 1B 01 5A 00 触发方式。
-    if vendor_flow:
+    # flow:
+    #   single  = 先 setPollForm 走到缝隙对齐(保证从标签起点开始) → 位图 → 再走到下一张缝隙（只出一张）
+    #   vendor  = 厂商原始顺序：位图 → setPollForm
+    #   legacy  = 我们最早试出的 1B 1B 01 5A 00 触发
+    if flow == "single":
+        body = b"".join(parts[3:])
+        return StreamInfo(stream=b"".join([*parts[:3], CMD_FEED_960, body, CMD_FEED_960]),
+                          row_bytes=wbytes, rows=rows, frames=frames,
+                          package_size=int(package_size))
+    if flow == "vendor":
         parts.append(CMD_FEED_960)
     else:
         parts.append(CMD_START_PRINT)
         if form_feed:
             parts.append(CMD_FEED_960)
+    # 注意：固件把 1D 66 参数当无符号数，负值会导致狂走纸，禁止使用负数回退。
     return StreamInfo(stream=b"".join(parts), row_bytes=wbytes, rows=rows,
                       frames=frames, package_size=int(package_size))
 
@@ -360,6 +372,7 @@ class HprtM1Backend(PrinterBackend):
     def print_image(self, image: Image.Image, *, copies: int = 1,
                     density: int = 75, align: str = "left",
                     auto_learn: bool = True, form_feed: bool = False,
+                    flow: str = "legacy", trim_bottom_mm: float = 2.0,
                     wait: float = 0.4) -> PrinterStatus:
         if image.width > self.capabilities.head_dots + 16:
             raise BackendError(
@@ -368,11 +381,14 @@ class HprtM1Backend(PrinterBackend):
         copies = max(1, min(int(copies or 1), 99))
         started = time.time()
         pre = self.ensure_ready(auto_learn=auto_learn)
-        if not pre.ok and not pre.locate_fail:
+        # 握手成功但状态查询无回包（value<0）时不再阻断打印：
+        # 部分固件在忙/刚上电时 status 查询会超时，但打印链路仍可用。
+        if pre.value >= 0 and not pre.ok and not pre.locate_fail:
             raise BackendError(f"打印机状态异常：{pre.summary}")
         info: StreamInfo | None = None
         for _ in range(copies):
             info = build_stream(image, density=density, align=align,
+                                flow=flow, trim_bottom_mm=trim_bottom_mm, 
                                 form_feed=form_feed)
             self._write(info.stream, gap=0)
             time.sleep(max(0.1, wait))

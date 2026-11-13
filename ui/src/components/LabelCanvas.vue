@@ -17,6 +17,10 @@ let resizeTimer = null
 const offsetMm = computed(() => Number(doc.value.offset_x_mm) || 0)
 const offsetY = computed(() => Number(doc.value.offset_y_mm) || 0)
 const absOffsetY = computed(() => Math.abs(offsetY.value))
+/** 底部少走：打印时不下发的底部区域（固件不支持反向走纸，用少走等效回退） */
+const trimMm = computed(() => Number(doc.value.trim_bottom_mm) || 0)
+const trimPx = computed(() => trimMm.value * DOT_PER_MM * zoom.value)
+const printHeightMm = computed(() => Math.max(0, round1(doc.value.height_mm - trimMm.value)))
 const totalMm = computed(() => round1(doc.value.width_mm + offsetMm.value))
 const labelDotW = computed(() => doc.value.width_mm * DOT_PER_MM)
 const totalDotW = computed(() => (doc.value.width_mm + offsetMm.value) * DOT_PER_MM)
@@ -239,6 +243,16 @@ onBeforeUnmount(() => {
               />
 
               <!-- 垂直微调：只在可能被裁切的一侧画一条虚线提示，不改变网格/元素坐标 -->
+              <!-- 底部少走：打印时不下发 trim 区域（预览仍是完整图像，这里只做提示） -->
+              <div
+                v-if="trimMm > 0"
+                class="trim-zone"
+                :style="{ height: `${trimPx}px` }"
+                :title="`底部少走 ${trimMm} mm：打印时只下发 ${printHeightMm} mm 的行（固件不支持反向走纸，等效回退）；该区域不打印`"
+              >
+                <span class="trim-tag">底部少走 {{ trimMm }} mm · 不打印</span>
+              </div>
+
               <div
                 v-if="offsetY !== 0"
                 class="v-offset-hint"
@@ -272,6 +286,7 @@ onBeforeUnmount(() => {
             <span>·</span>
             打印头坐标 0–{{ totalMm }} mm
             <span v-if="offsetY !== 0">· 垂直微调 {{ offsetY }} mm</span>
+            <span v-if="trimMm > 0">· 底部少走 {{ trimMm }} mm（不打印）</span>
           </div>
         </div>
       </div>

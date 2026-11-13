@@ -19,6 +19,7 @@ import {
   normalizeItemPosition,
   snapOffsetX,
   snapOffsetY,
+  snapTrimBottom,
   templateDoc,
   toSpec,
 } from '../label'
@@ -184,6 +185,7 @@ export function updateDoc(patch) {
   if ('border' in patch) doc.border = !!patch.border
   if ('offset_x_mm' in patch) doc.offset_x_mm = snapOffsetX(patch.offset_x_mm)
   if ('offset_y_mm' in patch) doc.offset_y_mm = snapOffsetY(patch.offset_y_mm)
+  if ('trim_bottom_mm' in patch) doc.trim_bottom_mm = snapTrimBottom(patch.trim_bottom_mm)
   if ('align' in patch) {
     doc.align = ['left', 'center', 'right'].includes(patch.align) ? patch.align : 'left'
   }

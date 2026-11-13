@@ -159,7 +159,7 @@ button {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 7px 8px;
+  gap: 6px 7px;
   padding: 8px 14px;
   background: linear-gradient(180deg, var(--toolbar-from) 0%, var(--toolbar-to) 100%);
   color: #e8ecf4;
@@ -240,7 +240,7 @@ button {
 .toolbar-field {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   font-size: 11px;
   color: #93a0b8;
   white-space: nowrap;
@@ -252,7 +252,7 @@ button {
   color: #e6edf9;
   border: 1px solid #334056;
   border-radius: 6px;
-  padding: 5px 6px;
+  padding: 4px 6px;
   font-size: 12px;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -270,7 +270,7 @@ button {
 }
 
 .toolbar-num {
-  width: 56px;
+  width: 50px;
   text-align: center;
 }
 
@@ -630,6 +630,37 @@ kbd {
   font-size: 10px;
   letter-spacing: 0.12em;
   writing-mode: vertical-rl;
+}
+
+/* 底部少走（trim）区域：打印时不下发，仅作视觉提示 */
+.trim-zone {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 8;
+  pointer-events: none;
+  background-color: rgba(220, 38, 38, 0.035);
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(220, 38, 38, 0.16) 0 6px,
+    transparent 6px 12px
+  );
+  border-top: 2px dashed rgba(220, 38, 38, 0.6);
+}
+
+.trim-tag {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  padding: 1px 5px;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  background: rgba(254, 242, 242, 0.95);
+  color: #b91c1c;
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
 /* 垂直微调提示：只在风险侧画虚线，不改网格/坐标 */
@@ -1542,6 +1573,12 @@ kbd {
 
 /* --------------------------------------------------------------- 响应式 */
 
+@media (max-width: 1520px) {
+  .brand-text small {
+    display: none;
+  }
+}
+
 @media (max-width: 1320px) {
   .panel-left {
     width: 190px;
@@ -1553,10 +1590,6 @@ kbd {
 
   .status-meta {
     gap: 10px;
-  }
-
-  .brand-text small {
-    display: none;
   }
 }
 

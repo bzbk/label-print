@@ -210,7 +210,9 @@ def build_stream(image: Image.Image, *, package_size: int = PACKAGE_SIZE,
         return StreamInfo(stream=b"".join([*parts[:3], CMD_FEED_960, body, CMD_FEED_960]),
                           row_bytes=wbytes, rows=rows, frames=frames,
                           package_size=int(package_size))
-    if flow == "vendor":
+    if flow == "frames":
+        pass                      # 只发位图帧：固件打印完会自己走到下一张缝隙（实测零浪费）
+    elif flow == "vendor":
         parts.append(CMD_FEED_960)
     else:
         parts.append(CMD_START_PRINT)
@@ -389,7 +391,7 @@ class HprtM1Backend(PrinterBackend):
     def print_image(self, image: Image.Image, *, copies: int = 1,
                     density: int = 75, align: str = "left",
                     auto_learn: bool = False, form_feed: bool = False,
-                    flow: str = "legacy", trim_bottom_mm: float = 0.0,
+                    flow: str = "frames", trim_bottom_mm: float = 0.0,
                     post_feed_mm: float = 2.0, wait: float = 0.4) -> PrinterStatus:
         if image.width > self.capabilities.head_dots + 16:
             raise BackendError(

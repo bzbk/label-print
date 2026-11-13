@@ -190,10 +190,12 @@ def render_label(spec: LabelSpec, dpi: int = DPI) -> Image.Image:
     """
     content = _render_content(spec, dpi)
     offset_px = mm_to_px(spec.offset_x_mm, dpi) if spec.offset_x_mm > 0 else 0
-    if offset_px <= 0:
+    offset_y_px = int(round(getattr(spec, "offset_y_mm", 0.0) / 25.4 * dpi))
+    if offset_px <= 0 and offset_y_px == 0:
         return content
     canvas = Image.new("RGB", (offset_px + content.width, content.height), "white")
-    canvas.paste(content, (offset_px, 0))
+    # 负坐标/越界由 PIL 自动裁剪：垂直偏移只平移内容，不改位图高度（标签高度不变）
+    canvas.paste(content, (offset_px, offset_y_px))
     return canvas
 
 

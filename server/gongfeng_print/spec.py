@@ -41,6 +41,8 @@ MIN_WIDTH_MM, MAX_WIDTH_MM = 5.0, 72.0
 MIN_HEIGHT_MM, MAX_HEIGHT_MM = 5.0, 300.0
 DEFAULT_OFFSET_X_MM = 10.0
 MIN_OFFSET_X_MM, MAX_OFFSET_X_MM = 0.0, 20.0
+DEFAULT_OFFSET_Y_MM = 0.0
+MIN_OFFSET_Y_MM, MAX_OFFSET_Y_MM = -15.0, 15.0
 OFFSET_STEP_MM = 0.5
 MAX_COPIES = 99
 MAX_ITEMS = 200
@@ -154,6 +156,7 @@ class LabelSpec:
     width_mm: float = DEFAULT_WIDTH_MM
     height_mm: float = DEFAULT_HEIGHT_MM
     offset_x_mm: float = DEFAULT_OFFSET_X_MM
+    offset_y_mm: float = DEFAULT_OFFSET_Y_MM
     border: bool = False
     density: int = DEFAULT_DENSITY
     align: str = "left"
@@ -177,6 +180,11 @@ class LabelSpec:
         return max(0, int(round(self.offset_x_mm / 25.4 * 203)))
 
     @property
+    def offset_y_px(self) -> int:
+        # 可为负：内容整体上移
+        return int(round(self.offset_y_mm / 25.4 * 203))
+
+    @property
     def canvas_width_px(self) -> int:
         """送给打印机的位图宽度 = 纸卷偏移 + 标签宽度（像素）。"""
         return max(1, int(round((self.width_mm + self.offset_x_mm) / 25.4 * 203)))
@@ -189,6 +197,8 @@ class LabelSpec:
             "height_px": self.height_px,
             "offset_x_mm": self.offset_x_mm,
             "offset_x_px": self.offset_x_px,
+            "offset_y_mm": self.offset_y_mm,
+            "offset_y_px": self.offset_y_px,
             "canvas_width_px": self.canvas_width_px,
             "border": self.border,
             "density": self.density,
@@ -301,6 +311,11 @@ def parse_spec(payload: Any) -> LabelSpec:
     offset_x_mm = round(offset_x_mm / OFFSET_STEP_MM) * OFFSET_STEP_MM
     offset_x_mm = round(min(MAX_OFFSET_X_MM, max(MIN_OFFSET_X_MM, offset_x_mm)), 3)
 
+    offset_y_mm = _as_float(payload.get("offset_y_mm"), "offset_y_mm",
+                            DEFAULT_OFFSET_Y_MM, MIN_OFFSET_Y_MM, MAX_OFFSET_Y_MM)
+    offset_y_mm = round(offset_y_mm / OFFSET_STEP_MM) * OFFSET_STEP_MM
+    offset_y_mm = round(min(MAX_OFFSET_Y_MM, max(MIN_OFFSET_Y_MM, offset_y_mm)), 3)
+
     model = payload.get("model")
     model = str(model).strip().lower() if isinstance(model, str) and model.strip() else None
 
@@ -312,6 +327,7 @@ def parse_spec(payload: Any) -> LabelSpec:
         width_mm=width,
         height_mm=height,
         offset_x_mm=offset_x_mm,
+        offset_y_mm=offset_y_mm,
         border=_as_bool(payload.get("border"), "border", False),
         density=snap_density(payload.get("density")),
         align=normalize_align(payload.get("align")),
